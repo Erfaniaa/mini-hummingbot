@@ -5,8 +5,8 @@ import time
 from dataclasses import dataclass
 from typing import List
 
-from ..connectors.dex.pancakeswap import PancakeSwapConnector
-from .engine import StrategyLoop, StrategyLoopConfig
+from connectors.dex.pancakeswap import PancakeSwapConnector
+from strategies.engine import StrategyLoop, StrategyLoopConfig
 
 
 @dataclass
@@ -27,8 +27,6 @@ class DexDCAConfig:
 class DexDCA:
     """
     Periodically executes market swaps to complete a total allocation over N orders.
-    Supports uniform or random (uniform) distribution of per-order sizes.
-    Executes across all selected wallets on each interval.
     """
 
     def __init__(self, cfg: DexDCAConfig) -> None:
@@ -49,7 +47,6 @@ class DexDCA:
         if self.orders_left <= 1:
             return max(0.0, self.remaining)
         if self.cfg.distribution == "random_uniform":
-            # Random within [0.5x, 1.5x] of the mean, clamped by remaining/orders_left
             mean = self.remaining / self.orders_left
             chunk = random.uniform(0.5 * mean, 1.5 * mean)
         else:
@@ -61,13 +58,14 @@ class DexDCA:
         ok_all = True
         for c in self.connectors:
             try:
-                c.market_swap(
+                tx = c.market_swap(
                     base_symbol=self.cfg.base_symbol,
                     quote_symbol=self.cfg.quote_symbol,
                     amount=amount,
                     amount_is_base=self.cfg.amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )
+                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
             except Exception:
                 ok_all = False
         return ok_all
@@ -84,7 +82,6 @@ class DexDCA:
         if ok:
             self.remaining -= amount
             self.orders_left -= 1
-        # Status
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
