@@ -8,6 +8,7 @@ from ..core.keystore import Keystore
 from ..core.token_registry import TokenRegistry
 from ..strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
 from ..strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
+from ..strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
@@ -303,6 +304,119 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print(f"Error: {e}")
 
 
+def run_dex_pure_mm(ks: Keystore) -> None:
+    print("\nDex Pure Market Making - Symmetric simulated limit orders around mid price")
+    # Network
+    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    try:
+        chain_id = int(chain_str)
+    except ValueError:
+        print("Invalid chain id.")
+        return
+    rpc_url = "https://bsc-dataseed.binance.org/" if chain_id == 56 else "https://bsc-testnet.publicnode.com"
+    # Wallet selection (multi)
+    ks.load()
+    wallets = ks.list_wallets()
+    if not wallets:
+        print("No wallets saved. Add one first in Wallet management.")
+        return
+    print("Select wallets (comma separated indices, empty=all):")
+    for i, w in enumerate(wallets, start=1):
+        print(f"  {i}) {w.name} ({w.address[:10]}...)")
+    sel = prompt("Enter indices: ").strip()
+    selected = []
+    if sel == "":
+        selected = list(range(1, len(wallets) + 1))
+    else:
+        try:
+            selected = [int(x) for x in sel.split(",")]
+            if any(i < 1 or i > len(wallets) for i in selected):
+                raise ValueError
+        except ValueError:
+            print("Invalid selection.")
+            return
+    pw = getpass.getpass("Keystore passphrase: ")
+    private_keys = []
+    try:
+        for i in selected:
+            private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
+    except Exception as e:
+        print(f"Error unlocking wallet(s): {e}")
+        return
+    # Symbols
+    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
+    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    if not base or not quote:
+        print("Base and Quote are required.")
+        return
+    # Order amount and basis
+    print("Amount basis for each order: 1) base  2) quote")
+    ab = prompt("Choose 1 or 2: ").strip()
+    if ab not in {"1", "2"}:
+        print("Invalid selection.")
+        return
+    amount_is_base = ab == "1"
+    order_amount: Optional[float] = None
+    while order_amount is None:
+        order_amount = input_float("Per-order amount: ")
+    # Levels and refresh
+    up = input_float("Upper step percent per level (e.g., 0.5): ")
+    lo = input_float("Lower step percent per level (e.g., 0.5): ")
+    if up is None or lo is None:
+        print("Invalid level percents.")
+        return
+    lev_str = prompt("Levels each side: ").strip()
+    try:
+        levels_each_side = int(lev_str)
+        if levels_each_side <= 0:
+            raise ValueError
+    except ValueError:
+        print("Invalid number of levels.")
+        return
+    rf_str = prompt("Refresh seconds [60]: ").strip() or "60"
+    ti_str = prompt("Tick interval seconds [1]: ").strip() or "1"
+    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    try:
+        refresh_seconds = float(rf_str)
+        tick_interval = float(ti_str)
+        sl_bps = int(sl_str)
+    except ValueError:
+        print("Invalid refresh/interval/slippage.")
+        return
+    print(f"Pure MM: {levels_each_side} lvls each side, steps +{up}%/-{lo}% per level, per-order={order_amount} ({'base' if amount_is_base else 'quote'})")
+    go = prompt("Start now? (yes/no): ").strip().lower()
+    if go not in {"y", "yes"}:
+        print("Cancelled.")
+        return
+    try:
+        cfg = DexPureMMConfig(
+            rpc_url=rpc_url,
+            private_keys=private_keys,
+            chain_id=chain_id,
+            base_symbol=base,
+            quote_symbol=quote,
+            upper_percent=float(up),
+            lower_percent=float(lo),
+            levels_each_side=levels_each_side,
+            order_amount=float(order_amount),
+            amount_is_base=amount_is_base,
+            refresh_seconds=refresh_seconds,
+            slippage_bps=sl_bps,
+            tick_interval_seconds=tick_interval,
+        )
+        strat = DexPureMarketMaking(cfg)
+        print("Running... Type Ctrl+C to stop.")
+        strat.start()
+        try:
+            while True:
+                pass
+        except KeyboardInterrupt:
+            print("Stopping...")
+            strat.stop()
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def main() -> None:
     print("Mini-Hummingbot - CLI")
     ks = ensure_keystore()
@@ -318,11 +432,14 @@ def main() -> None:
             print("\nStrategies:")
             print("  1) dex_simple_swap - One-time market swap (PancakeSwap)")
             print("  2) dex_batch_swap  - One-sided ladder of swaps (PancakeSwap)")
+            print("  3) dex_pure_market_making - Symmetric ladder with periodic refresh (PancakeSwap)")
             s = prompt("Select: ").strip()
             if s == "1":
                 run_dex_simple_swap(ks)
             elif s == "2":
                 run_dex_batch_swap(ks)
+            elif s == "3":
+                run_dex_pure_mm(ks)
             else:
                 print("Invalid selection.")
         elif choice == "0":
