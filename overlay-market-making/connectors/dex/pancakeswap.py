@@ -66,6 +66,15 @@ class PancakeSwapConnector(ExchangeConnector):
         amount_wei = self.client.to_wei(token, amount)
         return self.client.approve(token, int(amount_wei))
 
+    def approve_unlimited(self, symbol: str) -> str:
+        token = self._resolve(symbol)
+        max_uint = (1 << 256) - 1
+        return self.client.approve(token, max_uint)
+
+    def get_allowance(self, symbol: str) -> int:
+        token = self._resolve(symbol)
+        return int(self.client.get_allowance(token))
+
     def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50) -> str:
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
@@ -74,10 +83,14 @@ class PancakeSwapConnector(ExchangeConnector):
         token_out = quote if amount_is_base else base
         amount_in_wei = self.client.to_wei(token_in, amount)
 
+        # Ensure sufficient balance pre-check to avoid revert
+        bal_wei = self.client.get_balance(token_in)
+        if bal_wei < amount_in_wei:
+            raise RuntimeError("Insufficient token balance for swap")
         # Ensure allowance
         allowance = self.client.get_allowance(token_in)
-        if allowance < amount_in_wei:
-            self.client.approve(token_in, amount_in_wei)
+        if int(allowance) < int(amount_in_wei):
+            self.client.approve(token_in, int(amount_in_wei))
 
         # Try direct pool first; fall back via WBNB
         fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
