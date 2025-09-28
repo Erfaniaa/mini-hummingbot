@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+import random
+import time
+from dataclasses import dataclass
+from typing import List
+
+from ..connectors.dex.pancakeswap import PancakeSwapConnector
+from .engine import StrategyLoop, StrategyLoopConfig
+
+
+@dataclass
+class DexDCAConfig:
+    rpc_url: str
+    private_keys: List[str]
+    chain_id: int
+    base_symbol: str
+    quote_symbol: str
+    total_amount: float
+    amount_is_base: bool
+    interval_seconds: float
+    num_orders: int
+    distribution: str  # "uniform" | "random_uniform"
+    slippage_bps: int = 50
+
+
+class DexDCA:
+    """
+    Periodically executes market swaps to complete a total allocation over N orders.
+    Supports uniform or random (uniform) distribution of per-order sizes.
+    Executes across all selected wallets on each interval.
+    """
+
+    def __init__(self, cfg: DexDCAConfig) -> None:
+        self.cfg = cfg
+        self.connectors: List[PancakeSwapConnector] = [
+            PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id)
+            for pk in cfg.private_keys
+        ]
+        self.remaining = float(cfg.total_amount)
+        self.orders_left = int(cfg.num_orders)
+        self._loop = StrategyLoop(StrategyLoopConfig(
+            interval_seconds=cfg.interval_seconds,
+            on_tick=self._on_tick,
+            on_error=self._on_error,
+        ))
+
+    def _pick_chunk(self) -> float:
+        if self.orders_left <= 1:
+            return max(0.0, self.remaining)
+        if self.cfg.distribution == "random_uniform":
+            # Random within [0.5x, 1.5x] of the mean, clamped by remaining/orders_left
+            mean = self.remaining / self.orders_left
+            chunk = random.uniform(0.5 * mean, 1.5 * mean)
+        else:
+            chunk = self.remaining / self.orders_left
+        chunk = min(chunk, self.remaining)
+        return max(0.0, chunk)
+
+    def _execute(self, amount: float) -> bool:
+        ok_all = True
+        for c in self.connectors:
+            try:
+                c.market_swap(
+                    base_symbol=self.cfg.base_symbol,
+                    quote_symbol=self.cfg.quote_symbol,
+                    amount=amount,
+                    amount_is_base=self.cfg.amount_is_base,
+                    slippage_bps=self.cfg.slippage_bps,
+                )
+            except Exception:
+                ok_all = False
+        return ok_all
+
+    def _on_tick(self) -> None:
+        if self.orders_left <= 0 or self.remaining <= 0.0:
+            self.stop()
+            return
+        amount = self._pick_chunk()
+        if amount <= 0.0:
+            self.stop()
+            return
+        ok = self._execute(amount)
+        if ok:
+            self.remaining -= amount
+            self.orders_left -= 1
+        # Status
+        try:
+            b = self.connectors[0].get_balance(self.cfg.base_symbol)
+            q = self.connectors[0].get_balance(self.cfg.quote_symbol)
+            print(f"[dex_dca] executed={ok} chunk={amount:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+        except Exception:
+            print(f"[dex_dca] executed={ok} chunk={amount:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
+
+    def _on_error(self, e: Exception) -> None:
+        print(f"[dex_dca] Error: {e}")
+
+    def start(self) -> None:
+        self._loop.start()
+
+    def stop(self) -> None:
+        self._loop.stop()
+
+

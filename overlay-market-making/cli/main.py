@@ -9,6 +9,7 @@ from ..core.token_registry import TokenRegistry
 from ..strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
 from ..strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
 from ..strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
+from ..strategies.dex_dca import DexDCA, DexDCAConfig
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
@@ -417,6 +418,122 @@ def run_dex_pure_mm(ks: Keystore) -> None:
         print(f"Error: {e}")
 
 
+def run_dex_dca(ks: Keystore) -> None:
+    print("\nDex DCA - Periodically swap to complete total allocation over time")
+    # Network
+    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    try:
+        chain_id = int(chain_str)
+    except ValueError:
+        print("Invalid chain id.")
+        return
+    rpc_url = "https://bsc-dataseed.binance.org/" if chain_id == 56 else "https://bsc-testnet.publicnode.com"
+    # Wallet selection (multi)
+    ks.load()
+    wallets = ks.list_wallets()
+    if not wallets:
+        print("No wallets saved. Add one first in Wallet management.")
+        return
+    print("Select wallets (comma separated indices, empty=all):")
+    for i, w in enumerate(wallets, start=1):
+        print(f"  {i}) {w.name} ({w.address[:10]}...)")
+    sel = prompt("Enter indices: ").strip()
+    selected = []
+    if sel == "":
+        selected = list(range(1, len(wallets) + 1))
+    else:
+        try:
+            selected = [int(x) for x in sel.split(",")]
+            if any(i < 1 or i > len(wallets) for i in selected):
+                raise ValueError
+        except ValueError:
+            print("Invalid selection.")
+            return
+    pw = getpass.getpass("Keystore passphrase: ")
+    private_keys = []
+    try:
+        for i in selected:
+            private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
+    except Exception as e:
+        print(f"Error unlocking wallet(s): {e}")
+        return
+    # Symbols
+    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
+    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    if not base or not quote:
+        print("Base and Quote are required.")
+        return
+    # Direction and totals
+    print("Total amount basis: 1) base  2) quote")
+    ab = prompt("Choose 1 or 2: ").strip()
+    if ab not in {"1", "2"}:
+        print("Invalid selection.")
+        return
+    amount_is_base = ab == "1"
+    total_amount: Optional[float] = None
+    while total_amount is None:
+        total_amount = input_float("Enter total amount: ")
+    # Orders and interval
+    num_str = prompt("Number of DCA orders: ").strip()
+    try:
+        num_orders = int(num_str)
+        if num_orders <= 0:
+            raise ValueError
+    except ValueError:
+        print("Invalid number of orders.")
+        return
+    iv_str = prompt("Interval seconds between orders [60]: ").strip() or "60"
+    try:
+        interval_seconds = float(iv_str)
+    except ValueError:
+        print("Invalid interval.")
+        return
+    # Distribution
+    print("Distribution: 1) uniform  2) random_uniform")
+    dsel = prompt("Choose 1 or 2: ").strip()
+    if dsel not in {"1", "2"}:
+        print("Invalid distribution.")
+        return
+    distribution = "uniform" if dsel == "1" else "random_uniform"
+    # Slippage
+    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    try:
+        sl_bps = int(sl_str)
+    except ValueError:
+        print("Invalid slippage.")
+        return
+    print(f"DCA: total={total_amount} ({'base' if amount_is_base else 'quote'}), orders={num_orders}, interval={interval_seconds}s, dist={distribution}, wallets={len(private_keys)}")
+    go = prompt("Start now? (yes/no): ").strip().lower()
+    if go not in {"y", "yes"}:
+        print("Cancelled.")
+        return
+    try:
+        cfg = DexDCAConfig(
+            rpc_url=rpc_url,
+            private_keys=private_keys,
+            chain_id=chain_id,
+            base_symbol=base,
+            quote_symbol=quote,
+            total_amount=total_amount,
+            amount_is_base=amount_is_base,
+            interval_seconds=interval_seconds,
+            num_orders=num_orders,
+            distribution=distribution,
+            slippage_bps=sl_bps,
+        )
+        strat = DexDCA(cfg)
+        print("Running... Type Ctrl+C to stop.")
+        strat.start()
+        try:
+            while True:
+                pass
+        except KeyboardInterrupt:
+            print("Stopping...")
+            strat.stop()
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def main() -> None:
     print("Mini-Hummingbot - CLI")
     ks = ensure_keystore()
@@ -433,6 +550,7 @@ def main() -> None:
             print("  1) dex_simple_swap - One-time market swap (PancakeSwap)")
             print("  2) dex_batch_swap  - One-sided ladder of swaps (PancakeSwap)")
             print("  3) dex_pure_market_making - Symmetric ladder with periodic refresh (PancakeSwap)")
+            print("  4) dex_dca - Dollar-cost averaging with intervals (PancakeSwap)")
             s = prompt("Select: ").strip()
             if s == "1":
                 run_dex_simple_swap(ks)
@@ -440,6 +558,8 @@ def main() -> None:
                 run_dex_batch_swap(ks)
             elif s == "3":
                 run_dex_pure_mm(ks)
+            elif s == "4":
+                run_dex_dca(ks)
             else:
                 print("Invalid selection.")
         elif choice == "0":
