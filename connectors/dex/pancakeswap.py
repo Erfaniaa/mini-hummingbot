@@ -4,9 +4,9 @@ from typing import Optional
 
 from web3.exceptions import ContractLogicError
 
-from ...core.token_registry import TokenRegistry
-from ...connectors.base import ExchangeConnector
-from ...pancakeswap_client import PancakeSwapClient
+from core.token_registry import TokenRegistry
+from connectors.base import ExchangeConnector
+from pancakeswap_client import PancakeSwapClient
 
 
 class PancakeSwapConnector(ExchangeConnector):

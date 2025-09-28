@@ -4,13 +4,13 @@ import getpass
 import os
 from typing import Optional
 
-from ..core.keystore import Keystore
-from ..core.token_registry import TokenRegistry
-from ..strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
-from ..strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
-from ..strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
-from ..strategies.dex_dca import DexDCA, DexDCAConfig
-from ..connectors.dex.pancakeswap import PancakeSwapConnector
+from core.keystore import Keystore
+from core.token_registry import TokenRegistry
+from strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
+from strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
+from strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
+from strategies.dex_dca import DexDCA, DexDCAConfig
+from connectors.dex.pancakeswap import PancakeSwapConnector
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
