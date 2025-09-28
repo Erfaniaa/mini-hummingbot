@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from ..connectors.dex.pancakeswap import PancakeSwapConnector
+from connectors.dex.pancakeswap import PancakeSwapConnector
 
 
 @dataclass
@@ -55,6 +55,8 @@ class DexSimpleSwap:
                 amount_is_base=self.cfg.amount_is_base,
                 slippage_bps=self.cfg.slippage_bps,
             )
+            print("tx:", tx_hash)
+            print("explorer:", self.connector.tx_explorer_url(tx_hash))
         except Exception as e:
             raise RuntimeError(f"Swap failed: {e}")
         return tx_hash
