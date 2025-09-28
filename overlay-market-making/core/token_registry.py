@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 TOKENS_DIR = os.path.join(os.path.dirname(__file__), "..", "tokens")
 BEP20_MAINNET_FILE = os.path.abspath(os.path.join(TOKENS_DIR, "bep20_tokens_mainnet.json"))
 BEP20_TESTNET_FILE = os.path.abspath(os.path.join(TOKENS_DIR, "bep20_tokens_testnet.json"))
+CUSTOM_MAINNET_FILE = os.path.abspath(os.path.join(TOKENS_DIR, "custom_tokens_mainnet.json"))
+CUSTOM_TESTNET_FILE = os.path.abspath(os.path.join(TOKENS_DIR, "custom_tokens_testnet.json"))
 
 
 @dataclass
@@ -36,14 +38,24 @@ class TokenRegistry:
         self._load()
 
     def _load(self) -> None:
-        path = BEP20_MAINNET_FILE if self.network == "mainnet" else BEP20_TESTNET_FILE
-        if not os.path.exists(path):
+        base_path = BEP20_MAINNET_FILE if self.network == "mainnet" else BEP20_TESTNET_FILE
+        custom_path = CUSTOM_MAINNET_FILE if self.network == "mainnet" else CUSTOM_TESTNET_FILE
+        if not os.path.exists(base_path):
             raise FileNotFoundError(
-                f"Token list not found at {path}. Copy Pancake token lists into 'tokens/'."
+                f"Token list not found at {base_path}. Copy Pancake token lists into 'tokens/'."
             )
-        with open(path, "r", encoding="utf-8") as f:
+        with open(base_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        tokens = data.get("tokens", [])
+        tokens = list(data.get("tokens", []))
+        # Optionally merge custom tokens (override or append by symbol)
+        if os.path.exists(custom_path):
+            try:
+                with open(custom_path, "r", encoding="utf-8") as f:
+                    custom = json.load(f)
+                tokens.extend(custom.get("tokens", []))
+            except Exception:
+                # If custom file is malformed, ignore silently to avoid CLI crash
+                pass
         by_symbol: Dict[str, List[TokenInfo]] = {}
         for t in tokens:
             info = TokenInfo(
