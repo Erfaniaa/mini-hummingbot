@@ -7,6 +7,7 @@ from typing import Optional
 from ..core.keystore import Keystore
 from ..core.token_registry import TokenRegistry
 from ..strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
+from ..strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
@@ -177,6 +178,131 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print(f"Error: {e}")
 
 
+def run_dex_batch_swap(ks: Keystore) -> None:
+    print("\nDex Batch Swap - Ladder of one-sided simulated limit orders on PancakeSwap")
+    # Network
+    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    try:
+        chain_id = int(chain_str)
+    except ValueError:
+        print("Invalid chain id.")
+        return
+    rpc_url = "https://bsc-dataseed.binance.org/" if chain_id == 56 else "https://bsc-testnet.publicnode.com"
+    # Wallet selection (multi)
+    ks.load()
+    wallets = ks.list_wallets()
+    if not wallets:
+        print("No wallets saved. Add one first in Wallet management.")
+        return
+    print("Select wallets (comma separated indices, empty=all):")
+    for i, w in enumerate(wallets, start=1):
+        print(f"  {i}) {w.name} ({w.address[:10]}...)")
+    sel = prompt("Enter indices: ").strip()
+    selected = []
+    if sel == "":
+        selected = list(range(1, len(wallets) + 1))
+    else:
+        try:
+            selected = [int(x) for x in sel.split(",")]
+            if any(i < 1 or i > len(wallets) for i in selected):
+                raise ValueError
+        except ValueError:
+            print("Invalid selection.")
+            return
+    pw = getpass.getpass("Keystore passphrase: ")
+    private_keys = []
+    try:
+        for i in selected:
+            private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
+    except Exception as e:
+        print(f"Error unlocking wallet(s): {e}")
+        return
+    # Symbols
+    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
+    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    if not base or not quote:
+        print("Base and Quote are required.")
+        return
+    # Direction and amounts
+    print("Amount basis: 1) base  2) quote")
+    ab = prompt("Choose 1 or 2: ").strip()
+    if ab not in {"1", "2"}:
+        print("Invalid selection.")
+        return
+    amount_is_base = ab == "1"
+    total_amount: Optional[float] = None
+    while total_amount is None:
+        total_amount = input_float("Enter total amount to distribute: ")
+    # Price range
+    min_p: Optional[float] = None
+    max_p: Optional[float] = None
+    while min_p is None:
+        min_p = input_float("Min trigger price (quote per base): ")
+    while max_p is None:
+        max_p = input_float("Max trigger price (quote per base): ")
+    if min_p >= max_p:
+        print("Min price must be less than max price.")
+        return
+    # Count and distribution
+    num_str = prompt("Number of orders: ").strip()
+    try:
+        num_orders = int(num_str)
+        if num_orders <= 0:
+            raise ValueError
+    except ValueError:
+        print("Invalid number of orders.")
+        return
+    print("Distribution: 1) uniform  2) bell")
+    dsel = prompt("Choose 1 or 2: ").strip()
+    if dsel not in {"1", "2"}:
+        print("Invalid distribution.")
+        return
+    distribution = "uniform" if dsel == "1" else "bell"
+    # Interval and slippage
+    iv_str = prompt("Tick interval seconds [1]: ").strip() or "1"
+    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    try:
+        interval_sec = float(iv_str)
+        sl_bps = int(sl_str)
+    except ValueError:
+        print("Invalid interval/slippage.")
+        return
+    # Confirm
+    print(f"Ladder: {num_orders} orders from {min_p} to {max_p}, dist={distribution}, total={total_amount} ({'base' if amount_is_base else 'quote'}) across {len(private_keys)} wallet(s)")
+    go = prompt("Start now? (yes/no): ").strip().lower()
+    if go not in {"y", "yes"}:
+        print("Cancelled.")
+        return
+    # Start strategy loop
+    try:
+        cfg = DexBatchSwapConfig(
+            rpc_url=rpc_url,
+            private_keys=private_keys,
+            chain_id=chain_id,
+            base_symbol=base,
+            quote_symbol=quote,
+            total_amount=total_amount,
+            amount_is_base=amount_is_base,
+            min_price=min_p,
+            max_price=max_p,
+            num_orders=num_orders,
+            distribution=distribution,
+            interval_seconds=interval_sec,
+            slippage_bps=sl_bps,
+        )
+        strat = DexBatchSwap(cfg)
+        print("Running... Type Ctrl+C to stop.")
+        strat.start()
+        try:
+            while True:
+                pass
+        except KeyboardInterrupt:
+            print("Stopping...")
+            strat.stop()
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def main() -> None:
     print("Mini-Hummingbot - CLI")
     ks = ensure_keystore()
@@ -191,9 +317,12 @@ def main() -> None:
         elif choice == "2":
             print("\nStrategies:")
             print("  1) dex_simple_swap - One-time market swap (PancakeSwap)")
+            print("  2) dex_batch_swap  - One-sided ladder of swaps (PancakeSwap)")
             s = prompt("Select: ").strip()
             if s == "1":
                 run_dex_simple_swap(ks)
+            elif s == "2":
+                run_dex_batch_swap(ks)
             else:
                 print("Invalid selection.")
         elif choice == "0":
