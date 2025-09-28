@@ -4,8 +4,8 @@ import math
 from dataclasses import dataclass
 from typing import List
 
-from ..connectors.dex.pancakeswap import PancakeSwapConnector
-from .engine import StrategyLoop, StrategyLoopConfig
+from connectors.dex.pancakeswap import PancakeSwapConnector
+from strategies.engine import StrategyLoop, StrategyLoopConfig
 
 
 @dataclass
@@ -70,13 +70,14 @@ class DexPureMarketMaking:
         ok_all = True
         for c in self.connectors:
             try:
-                c.market_swap(
+                tx = c.market_swap(
                     base_symbol=self.cfg.base_symbol,
                     quote_symbol=self.cfg.quote_symbol,
                     amount=amount,
                     amount_is_base=amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )
+                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
             except Exception:
                 ok_all = False
         return ok_all
