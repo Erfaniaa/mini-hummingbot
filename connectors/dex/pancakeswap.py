@@ -347,7 +347,8 @@ class PancakeSwapConnector(ExchangeConnector):
     def get_price(self, base_symbol: str, quote_symbol: str) -> float:
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
-        # Price convention here returns quote per 1 base using BUY path (token_in=base -> token_out=quote)
+        # Returns quote per 1 base; PancakeSwap quoter is queried with token_in=base -> token_out=quote.
+        # When selling base for quote, this is the inverse convention from a SELL UI perspective.
         one_base = 10 ** self.client.get_decimals(base)
         fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
         for fee in fee_candidates:
@@ -408,7 +409,7 @@ class PancakeSwapConnector(ExchangeConnector):
         if int(allowance) < int(amount_in_wei):
             self.client.approve(token_in, int(amount_in_wei))
 
-        # Try BUY direction (token_in -> token_out) direct pool; fall back via WBNB
+        # Try direct path with provided direction; fall back via WBNB, then try reverse
         fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
         try:
             for fee in fee_candidates:
@@ -422,8 +423,7 @@ class PancakeSwapConnector(ExchangeConnector):
                     return self.client.swap_v3_exact_input_path([token_in, wbnb, token_out], list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
                 except ContractLogicError:
                     continue
-            # As a last resort, try SELL direction (reverse path) if the user provided inverted symbols
-            # This addresses cases where liquidity exists only in the opposite pool definition.
+            # As a last resort, try reverse direction if the primary fails
             rev_in, rev_out = token_out, token_in
             for fee in fee_candidates:
                 try:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import getpass
 import os
 from typing import Optional
+import threading
 
 from core.keystore import Keystore
 from core.token_registry import TokenRegistry
@@ -201,6 +202,7 @@ def _save_defaults(name: str, data: dict) -> None:
 
 def run_dex_simple_swap(ks: Keystore) -> None:
     print("\nDex Simple Swap - One-time market swap on PancakeSwap")
+    print("Amounts can be provided in base or quote; we convert under the hood. On PancakeSwap, selling base for quote may display the inverse of base/quote price.")
     defaults = _load_defaults("dex_simple_swap")
     # Network
     chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
@@ -210,29 +212,34 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print("Invalid chain id.")
         return
     rpc_url = "https://bsc-dataseed.binance.org/" if chain_id == 56 else "https://bsc-testnet.publicnode.com"
-    # Wallet selection
+    # Wallet selection (multi)
     ks.load()
     wallets = ks.list_wallets()
     if not wallets:
         print("No wallets saved. Add one first in Wallet management.")
         return
-    print("Select wallet to use:")
+    print("Select wallets (comma separated indices, empty=all):")
     for i, w in enumerate(wallets, start=1):
         print(f"  {i}) {w.name} ({w.address[:10]}...)")
-    idx_str = prompt("Enter number: ").strip()
-    try:
-        idx = int(idx_str)
-        if idx < 1 or idx > len(wallets):
-            raise ValueError
-    except ValueError:
-        print("Invalid selection.")
-        return
-    wallet = wallets[idx - 1]
+    sel = prompt("Enter indices: ").strip()
+    selected = []
+    if sel == "":
+        selected = list(range(1, len(wallets) + 1))
+    else:
+        try:
+            selected = [int(x) for x in sel.split(",")]
+            if any(i < 1 or i > len(wallets) for i in selected):
+                raise ValueError
+        except ValueError:
+            print("Invalid selection.")
+            return
     pw = getpass.getpass("Keystore passphrase: ")
+    private_keys = []
     try:
-        private_key = ks.get_private_key(wallet.name, pw)
+        for i in selected:
+            private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
     except Exception as e:
-        print(f"Error unlocking wallet: {e}")
+        print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
     base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
@@ -240,7 +247,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     if not base or not quote:
         print("Base and Quote are required.")
         return
-    # Amount
+    # Amount per wallet
     print("Amount basis: 1) base  2) quote")
     ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
@@ -250,7 +257,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     amount: Optional[float] = None
     while amount is None:
         adef = str(defaults.get("amount", ""))
-        amount = input_float(f"Enter amount [{adef}]: ")
+        amount = input_float(f"Enter per-wallet amount [{adef}]: ")
         if amount is None and adef != "":
             try:
                 amount = float(adef)
@@ -265,7 +272,8 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print("Invalid slippage.")
         return
     # Confirm
-    print(f"You will swap {'BASE->QUOTE' if amount_is_base else 'QUOTE->BASE'}: {base} <-> {quote}, amount={amount} ({'base' if amount_is_base else 'quote'}), slippage={sl_bps} bps")
+    direction = f"{'spend ' + base if amount_is_base else 'spend ' + quote} -> {'receive ' + quote if amount_is_base else 'receive ' + base}"
+    print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_is_base else 'quote'}), slippage={sl_bps} bps")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
         _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_is_base, "slippage_bps": sl_bps})
@@ -273,25 +281,32 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     if go not in {"y", "yes"}:
         print("Cancelled.")
         return
-    # Execute
-    try:
-        cfg = DexSimpleSwapConfig(
-            rpc_url=rpc_url,
-            private_key=private_key,
-            chain_id=chain_id,
-            base_symbol=base,
-            quote_symbol=quote,
-            amount=amount,
-            amount_is_base=amount_is_base,
-            slippage_bps=sl_bps,
-        )
-        strat = DexSimpleSwap(cfg)
-        tx_hash = strat.run()
-        url = "https://bscscan.com/tx/" + tx_hash if chain_id == 56 else "https://testnet.bscscan.com/tx/" + tx_hash
-        print("Swap submitted:", tx_hash)
-        print("Explorer:", url)
-    except Exception as e:
-        print(f"Error: {e}")
+    # Execute concurrently per wallet
+    def worker(pk: str) -> None:
+        try:
+            cfg = DexSimpleSwapConfig(
+                rpc_url=rpc_url,
+                private_key=pk,
+                chain_id=chain_id,
+                base_symbol=base,
+                quote_symbol=quote,
+                amount=amount,
+                amount_is_base=amount_is_base,
+                slippage_bps=sl_bps,
+            )
+            strat = DexSimpleSwap(cfg)
+            tx_hash = strat.run()
+            url = ("https://bscscan.com/tx/" if chain_id == 56 else "https://testnet.bscscan.com/tx/") + tx_hash
+            print("Swap submitted:", tx_hash)
+            print("Explorer:", url)
+        except Exception as e:
+            print(f"Error: {e}")
+
+    threads = [threading.Thread(target=worker, args=(pk,), daemon=True) for pk in private_keys]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
 
 def run_dex_batch_swap(ks: Keystore) -> None:
