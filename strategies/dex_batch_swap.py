@@ -58,9 +58,9 @@ class DexBatchSwap:
     - For quote->base conversions: execute when price <= level
     """
 
-    def __init__(self, cfg: DexBatchSwapConfig) -> None:
+    def __init__(self, cfg: DexBatchSwapConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
-        self.connectors: List[PancakeSwapConnector] = [
+        self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id)
             for pk in cfg.private_keys
         ]

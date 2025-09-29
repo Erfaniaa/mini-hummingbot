@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
@@ -29,9 +29,9 @@ class DexDCA:
     Periodically executes market swaps to complete a total allocation over N orders.
     """
 
-    def __init__(self, cfg: DexDCAConfig) -> None:
+    def __init__(self, cfg: DexDCAConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
-        self.connectors: List[PancakeSwapConnector] = [
+        self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id)
             for pk in cfg.private_keys
         ]

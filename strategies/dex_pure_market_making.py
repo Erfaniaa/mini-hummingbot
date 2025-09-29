@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
@@ -35,9 +35,9 @@ class DexPureMarketMaking:
     - Retries failed orders on subsequent ticks
     """
 
-    def __init__(self, cfg: DexPureMMConfig) -> None:
+    def __init__(self, cfg: DexPureMMConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
-        self.connectors: List[PancakeSwapConnector] = [
+        self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id)
             for pk in cfg.private_keys
         ]

@@ -25,9 +25,9 @@ class DexSimpleSwap:
     - Performs the swap and returns tx hash
     """
 
-    def __init__(self, cfg: DexSimpleSwapConfig) -> None:
+    def __init__(self, cfg: DexSimpleSwapConfig, connector: Optional[PancakeSwapConnector] = None) -> None:
         self.cfg = cfg
-        self.connector = PancakeSwapConnector(
+        self.connector = connector or PancakeSwapConnector(
             rpc_url=cfg.rpc_url,
             private_key=cfg.private_key,
             chain_id=cfg.chain_id,
