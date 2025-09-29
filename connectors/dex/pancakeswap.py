@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from typing import Optional, Dict, List
+from decimal import Decimal, getcontext, ROUND_DOWN
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -23,6 +24,7 @@ from core.token_registry import TokenRegistry
 from connectors.base import ExchangeConnector
 
 
+# Inlined minimal PancakeSwap v3 client
 @dataclass
 class QuoteV3:
     token_in: str
@@ -183,12 +185,17 @@ class PancakeSwapClient:
         return int(self.erc20(token).functions.allowance(owner_addr, spender_addr).call())
 
     def to_wei(self, token: str, amount_decimal: float) -> int:
-        decimals = self.get_decimals(token)
-        return int(amount_decimal * (10 ** decimals))
+        # Use Decimal for precise conversion and round down to avoid exceeding balances
+        getcontext().prec = 50
+        d = Decimal(self.get_decimals(token))
+        value = (Decimal(str(amount_decimal)) * (Decimal(10) ** d)).to_integral_value(rounding=ROUND_DOWN)
+        return int(value)
 
     def from_wei(self, token: str, amount_wei: int) -> float:
-        decimals = self.get_decimals(token)
-        return float(amount_wei) / float(10 ** decimals)
+        getcontext().prec = 50
+        d = Decimal(self.get_decimals(token))
+        value = Decimal(int(amount_wei)) / (Decimal(10) ** d)
+        return float(value)
 
     def quote_v3_exact_input_single(self, token_in: str, token_out: str, fee: int, amount_in: int, slippage_bps: int = 50, sqrt_price_limit_x96: int = 0) -> QuoteV3:
         if self._v3_quoter is None:
