@@ -368,12 +368,18 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print("Base and Quote are required.")
         return
     # Direction and amounts
+    print("Trade side: 1) Sell base for quote  2) Buy base with quote")
+    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    if ts not in {"1", "2"}:
+        print("Invalid trade side.")
+        return
+    spend_is_base = ts == "1"
     print("Amount basis: 1) base  2) quote")
     ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
-    amount_is_base = ab == "1"
+    amount_basis_is_base = ab == "1"
     total_amount: Optional[float] = None
     while total_amount is None:
         adef = str(defaults.get("total_amount", ""))
@@ -429,14 +435,14 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print("Invalid interval/slippage.")
         return
     # Confirm
-    print(f"Ladder: {num_orders} orders from {min_p} to {max_p}, dist={distribution}, total={total_amount} ({'base' if amount_is_base else 'quote'}) across {len(private_keys)} wallet(s)")
+    print(f"Ladder: {num_orders} orders from {min_p} to {max_p}, dist={distribution}, total={total_amount} ({'base' if amount_basis_is_base else 'quote'}), side={'sell' if spend_is_base else 'buy'} across {len(private_keys)} wallet(s)")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
         _save_defaults("dex_batch_swap", {
             "chain_id": chain_id,
             "base": base,
             "quote": quote,
-            "amount_is_base": amount_is_base,
+            "amount_is_base": amount_basis_is_base,
             "total_amount": total_amount,
             "min_price": min_p,
             "max_price": max_p,
@@ -444,6 +450,7 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             "distribution": distribution,
             "interval_seconds": interval_sec,
             "slippage_bps": sl_bps,
+            "spend_is_base": spend_is_base,
         })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
@@ -458,7 +465,9 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             base_symbol=base,
             quote_symbol=quote,
             total_amount=total_amount,
-            amount_is_base=amount_is_base,
+            amount_is_base=amount_basis_is_base,
+            amount_basis_is_base=amount_basis_is_base,
+            spend_is_base=spend_is_base,
             min_price=min_p,
             max_price=max_p,
             num_orders=num_orders,
@@ -677,6 +686,12 @@ def run_dex_dca(ks: Keystore) -> None:
         print("Base and Quote are required.")
         return
     # Direction and totals
+    print("Trade side: 1) Sell base for quote  2) Buy base with quote")
+    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    if ts not in {"1", "2"}:
+        print("Invalid trade side.")
+        return
+    spend_is_base = ts == "1"
     print("Total amount basis: 1) base  2) quote")
     ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
@@ -725,7 +740,7 @@ def run_dex_dca(ks: Keystore) -> None:
     except ValueError:
         print("Invalid slippage.")
         return
-    print(f"DCA: total={total_amount} ({'base' if amount_is_base else 'quote'}), orders={num_orders}, interval={interval_seconds}s, dist={distribution}, wallets={len(private_keys)}")
+    print(f"DCA: total={total_amount} ({'base' if amount_is_base else 'quote'}), side={'sell' if spend_is_base else 'buy'}, orders={num_orders}, interval={interval_seconds}s, dist={distribution}, wallets={len(private_keys)}")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
         _save_defaults("dex_dca", {
@@ -738,6 +753,7 @@ def run_dex_dca(ks: Keystore) -> None:
             "interval_seconds": interval_seconds,
             "distribution": distribution,
             "slippage_bps": sl_bps,
+            "spend_is_base": spend_is_base,
         })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
@@ -752,6 +768,8 @@ def run_dex_dca(ks: Keystore) -> None:
             quote_symbol=quote,
             total_amount=total_amount,
             amount_is_base=amount_is_base,
+            amount_basis_is_base=amount_is_base,
+            spend_is_base=spend_is_base,
             interval_seconds=interval_seconds,
             num_orders=num_orders,
             distribution=distribution,

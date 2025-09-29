@@ -27,12 +27,17 @@ class ExchangeConnector(ABC):
         """Approve router/spender to spend 'symbol'. Return tx hash."""
 
     @abstractmethod
-    def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50) -> str:
+    def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50, side: Optional[str] = None) -> str:
         """
         Execute a market swap.
 
-        - If amount_is_base is True: spend 'base' amount to receive quote
-        - If amount_is_base is False: spend 'quote' amount to receive base
+        Direction can be specified either via amount_is_base or explicitly via side.
+        - side == "sell": spend base to receive quote (amount is in base units)
+        - side == "buy":  spend quote to receive base (amount is in quote units)
+        If side is None, amount_is_base determines direction:
+        - amount_is_base True  => sell
+        - amount_is_base False => buy
+        Implementations should prefer 'side' when provided.
         Return transaction hash.
         """
 
