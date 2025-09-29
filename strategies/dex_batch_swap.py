@@ -107,7 +107,6 @@ class DexBatchSwap:
             self.done[li] = True
             self.remaining[li] = 0.0
             return
-        tx_hashes: List[str] = []
         for conn in self.connectors:
             try:
                 tx = conn.market_swap(
@@ -117,7 +116,6 @@ class DexBatchSwap:
                     amount_is_base=self.cfg.amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )
-                tx_hashes.append(tx)
                 print("tx:", tx, "explorer:", conn.tx_explorer_url(tx))
             except Exception:
                 return
@@ -147,7 +145,7 @@ class DexBatchSwap:
 
         remaining_levels = sum(1 for d in self.done if not d)
         if self._tick_counter % 1 == 0:
-            print(f"[dex_batch_swap] price={price:.8f} levels_left={remaining_levels} {self._balances_summary()}")
+            print(f"[dex_batch_swap] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={price:.8f} levels_left={remaining_levels} {self._balances_summary()}")
 
         if all(self.done):
             self.stop()

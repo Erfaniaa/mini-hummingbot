@@ -136,9 +136,9 @@ class DexPureMarketMaking:
             try:
                 b = self.connectors[0].get_balance(self.cfg.base_symbol)
                 q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                print(f"[dex_pure_mm] px={px:.8f} fired={fired} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+                print(f"[dex_pure_mm] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} fired={fired} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
             except Exception:
-                print(f"[dex_pure_mm] px={px:.8f} fired={fired}")
+                print(f"[dex_pure_mm] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} fired={fired}")
 
     def _on_error(self, e: Exception) -> None:
         print(f"[dex_pure_mm] Error: {e}")

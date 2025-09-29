@@ -108,9 +108,9 @@ class DexDCA:
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+            print(f"[dex_dca] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
         except Exception:
-            print(f"[dex_dca] executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
+            print(f"[dex_dca] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
 
     def _on_error(self, e: Exception) -> None:
         print(f"[dex_dca] Error: {e}")
