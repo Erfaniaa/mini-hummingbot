@@ -202,7 +202,7 @@ class DexDCA:
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+            print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} balance[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
         except Exception:
             print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
 

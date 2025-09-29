@@ -76,6 +76,7 @@ class DexBatchSwap:
         self.remaining: List[float] = [cfg.total_amount * w for w in self.weights]
         self.done: List[bool] = [False] * cfg.num_orders
         self._tick_counter: int = 0
+        self._stopped: bool = False
         
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
@@ -164,44 +165,65 @@ class DexBatchSwap:
         return float(amount)
 
     def _execute_level(self, li: int, amount_user_basis: float, price: float) -> None:
+        """Execute a level using OrderManager for proper tracking and validation."""
+        if self._stopped:
+            return
+        
         basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
         spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
-        # exact-output if user amount represents output side
-        if is_exact_output_case(basis_is_base, spend_is_base):
-            target_out_symbol = self.cfg.quote_symbol if spend_is_base else self.cfg.base_symbol
-            for conn in self.connectors:
-                try:
+        side = "sell" if spend_is_base else "buy"
+        
+        # Create order for each wallet
+        for wallet_idx, (conn, order_mgr) in enumerate(zip(self.connectors, self.order_managers)):
+            # Create order
+            order = order_mgr.create_order(
+                base_symbol=self.cfg.base_symbol,
+                quote_symbol=self.cfg.quote_symbol,
+                side=side,
+                amount=amount_user_basis,
+                price=price,
+                reason=f"Price level {li+1}/{len(self.levels)}: {self.levels[li]:.8f}"
+            )
+            
+            # Determine spend amount for validation
+            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
+            if is_exact_output_case(basis_is_base, spend_is_base):
+                # For exact output, we don't know exact spend until swap, use estimate
+                spend_amt_estimate = compute_spend_amount(price, amount_user_basis, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt_estimate * 1.1)  # 10% buffer for slippage
+            else:
+                spend_amt = compute_spend_amount(price, amount_user_basis, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt)
+            
+            # Pre-order validation
+            check = order_mgr.validate_order(conn, spend_symbol, spend_amt_estimate)
+            if not check.passed:
+                order_mgr.mark_failed(order, check.reason)
+                print(f"[wallet_{wallet_idx+1}] [dex_batch_swap] Skipping level {li+1}: {check.reason}")
+                continue
+            
+            # Submit order with retry
+            def submit_swap():
+                if is_exact_output_case(basis_is_base, spend_is_base):
                     if spend_is_base:
-                        tx = conn.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
+                        return conn.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
                     else:
-                        tx = conn.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
-                    print(f"[dex_batch_swap] Transaction: {conn.tx_explorer_url(tx)}")
-                except Exception:
-                    return
-            self.done[li] = True
-            self.remaining[li] = 0.0
-            return
-        # Else compute spend amount normally
-        spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
-        spend_amt = compute_spend_amount(price, amount_user_basis, basis_is_base, spend_is_base)
-        amount_q = self._quantize(spend_symbol, spend_amt)
-        if amount_q <= 0:
-            self.done[li] = True
-            self.remaining[li] = 0.0
-            return
-        for conn in self.connectors:
-            try:
-                tx = conn.market_swap(
-                    base_symbol=self.cfg.base_symbol,
-                    quote_symbol=self.cfg.quote_symbol,
-                    amount=amount_q,
-                    amount_is_base=spend_is_base,
-                    slippage_bps=self.cfg.slippage_bps,
-                    side=("sell" if spend_is_base else "buy"),
-                )
-                print(f"[dex_batch_swap] Transaction: {conn.tx_explorer_url(tx)}")
-            except Exception:
-                return
+                        return conn.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
+                else:
+                    return conn.market_swap(
+                        base_symbol=self.cfg.base_symbol,
+                        quote_symbol=self.cfg.quote_symbol,
+                        amount=spend_amt_estimate,
+                        amount_is_base=spend_is_base,
+                        slippage_bps=self.cfg.slippage_bps,
+                        side=side,
+                    )
+            
+            success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
+            if success:
+                order_mgr.mark_filled(order)
+        
+        # Mark level as done
         self.done[li] = True
         self.remaining[li] = 0.0
 
@@ -209,9 +231,9 @@ class DexBatchSwap:
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            return f"bal[{self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}]"
+            return f"balance[{self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}]"
         except Exception:
-            return "bal[unavailable]"
+            return "balance[unavailable]"
 
     def _on_tick(self) -> None:
         """Tick handler with resilience - continues even if individual operations fail."""
@@ -282,6 +304,12 @@ class DexBatchSwap:
 
     def stop(self) -> None:
         """Stop strategy and print final reports."""
+        if self._stopped:
+            return
+        
+        self._stopped = True
+        self._loop.stop()
+        
         print("\n[dex_batch_swap] Stopping strategy...")
         
         # Print final snapshots and P&L reports
@@ -314,7 +342,5 @@ class DexBatchSwap:
         print(f"[dex_batch_swap] Successful: {stats['successful']}")
         print(f"[dex_batch_swap] Failed: {stats['failed']}")
         print(f"[dex_batch_swap] Success Rate: {stats['success_rate']:.1f}%\n")
-        
-        self._loop.stop()
 
 

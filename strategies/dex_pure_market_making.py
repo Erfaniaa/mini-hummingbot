@@ -230,7 +230,7 @@ class DexPureMarketMaking:
             try:
                 b = self.connectors[0].get_balance(self.cfg.base_symbol)
                 q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired} balance[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
             except Exception:
                 print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired}")
 
