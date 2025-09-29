@@ -100,11 +100,31 @@ class DexSimpleSwap:
 
         # Determine spend symbol
         spend_symbol = base if spend_is_base else quote
+        
+        # Get current price for order tracking
+        try:
+            current_price = self.connector.get_price_fast(base, quote)
+        except Exception:
+            try:
+                current_price = self.connector.get_price(base, quote)
+            except Exception:
+                current_price = None
 
         # If user amount is on the output side, prefer exact-output swap to guarantee target receive amount
         if is_exact_output_case(basis_is_base, spend_is_base):
             target_out_symbol = quote if spend_is_base else base
             spend_symbol = base if spend_is_base else quote
+            
+            # Create order for tracking
+            order = self.order_manager.create_order(
+                base_symbol=base,
+                quote_symbol=quote,
+                side=side,
+                amount=amount,
+                price=current_price,
+                reason=f"Exact-output swap: receive exactly {amount} {target_out_symbol}"
+            )
+            
             # Best-effort balance pre-check using estimator (padded by slippage for safety)
             try:
                 est_in = float(self.connector.estimate_in_for_exact_out(
@@ -114,26 +134,49 @@ class DexSimpleSwap:
                 ))
             except Exception:
                 est_in = 0.0
+            
             if est_in > 0:
                 pad = (10_000 + int(self.cfg.slippage_bps) + 50) / 10_000.0
                 est_in_padded = est_in * pad
                 bal_check_amt = self._quantize(spend_symbol, est_in_padded)
-                bal_avail = self.connector.get_balance(spend_symbol)
-                if bal_avail < bal_check_amt:
-                    raise RuntimeError(f"{self._prefix()}Insufficient balance: {spend_symbol} balance {bal_avail} < {bal_check_amt}")
+                
+                # Validate before submission
+                check = self.order_manager.validate_order(
+                    self.connector,
+                    spend_symbol,
+                    bal_check_amt
+                )
+                
+                if not check.passed:
+                    print(f"{self._prefix()}⚠ Pre-order validation failed: {check.reason}")
+                    if check.details:
+                        for key, val in check.details.items():
+                            print(f"{self._prefix()}  {key}: {val}")
+                    raise RuntimeError(f"{self._prefix()}Cannot place order: {check.reason}")
+            
             print(f"{self._prefix()}[swap] exact-out: target {amount} {target_out_symbol}, side={side}")
-            try:
-                tx_hash = self.connector.swap_exact_out(
+            
+            # Submit with retry
+            def submit_swap():
+                return self.connector.swap_exact_out(
                     token_in_symbol=spend_symbol,
                     token_out_symbol=target_out_symbol,
                     target_out_amount=float(amount),
                     slippage_bps=int(self.cfg.slippage_bps),
                 )
-                url = self.connector.tx_explorer_url(tx_hash)
-                print(f"{self._prefix()}Transaction: {url}")
-                return self._finalize(tx_hash)
-            except Exception as e:
-                print(f"{self._prefix()}[swap] exact-out failed ({e}); falling back to market swap with computed spend amount...")
+            
+            success = self.order_manager.submit_order_with_retry(
+                order,
+                submit_swap,
+                self.connector.tx_explorer_url
+            )
+            
+            if success:
+                self.order_manager.mark_filled(order, actual_output=amount)
+                return self._finalize(order.tx_hash)
+            else:
+                # If all retries failed, try fallback
+                print(f"{self._prefix()}[swap] exact-out failed; falling back to market swap with computed spend amount...")
                 # Fallback to market swap by computing spend amount
                 try:
                     est_spend = self.connector.estimate_in_for_exact_out(
@@ -159,12 +202,33 @@ class DexSimpleSwap:
                         raise RuntimeError(f"{self._prefix()}Swap failed: cannot compute spend amount after exact-out failure")
                     spend_amt = compute_spend_amount(price_qpb, amount, basis_is_base, spend_is_base)
                 amount_q = self._quantize(spend_symbol, spend_amt)
-                bal = self.connector.get_balance(spend_symbol)
-                if bal < amount_q:
-                    raise RuntimeError(f"{self._prefix()}Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
+                
+                # Create fallback order
+                fallback_order = self.order_manager.create_order(
+                    base_symbol=base,
+                    quote_symbol=quote,
+                    side=side,
+                    amount=amount_q,
+                    price=current_price,
+                    reason=f"Fallback market swap after exact-out failure"
+                )
+                
+                # Validate fallback order
+                check = self.order_manager.validate_order(
+                    self.connector,
+                    spend_symbol,
+                    amount_q
+                )
+                
+                if not check.passed:
+                    print(f"{self._prefix()}⚠ Fallback validation failed: {check.reason}")
+                    raise RuntimeError(f"{self._prefix()}Cannot execute fallback: {check.reason}")
+                
                 print(f"{self._prefix()}[swap] spending {amount_q} {'BASE' if spend_is_base else 'QUOTE'} token ({spend_symbol}), side={side}")
-                try:
-                    tx_hash = self.connector.market_swap(
+                
+                # Submit fallback with retry
+                def submit_fallback():
+                    return self.connector.market_swap(
                         base_symbol=base,
                         quote_symbol=quote,
                         amount=amount_q,
@@ -172,11 +236,18 @@ class DexSimpleSwap:
                         slippage_bps=self.cfg.slippage_bps,
                         side=side,
                     )
-                    url = self.connector.tx_explorer_url(tx_hash)
-                    print(f"{self._prefix()}Transaction: {url}")
-                    return self._finalize(tx_hash)
-                except Exception as e2:
-                    raise RuntimeError(f"{self._prefix()}Swap failed after fallback: {e2}")
+                
+                success = self.order_manager.submit_order_with_retry(
+                    fallback_order,
+                    submit_fallback,
+                    self.connector.tx_explorer_url
+                )
+                
+                if not success:
+                    raise RuntimeError(f"{self._prefix()}Fallback swap failed after {self.order_manager.max_retries} attempts")
+                
+                self.order_manager.mark_filled(fallback_order)
+                return self._finalize(fallback_order.tx_hash)
         # Otherwise, compute spend amount using side-aware price (approx-output with slippage guard)
         if basis_is_base == spend_is_base:
             spend_amt = amount
@@ -210,15 +281,36 @@ class DexSimpleSwap:
         # Quantize to token decimals before checks and execution
         amount_q = self._quantize(spend_symbol, spend_amt)
 
-        # Check balances
-        bal = self.connector.get_balance(spend_symbol)
-        if bal < amount_q:
-            raise RuntimeError(f"{self._prefix()}Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
+        # Create order for tracking
+        order = self.order_manager.create_order(
+            base_symbol=base,
+            quote_symbol=quote,
+            side=side,
+            amount=amount_q,
+            price=current_price,
+            reason=f"Market swap: spend {amount_q} {spend_symbol}"
+        )
+
+        # Validate before submission
+        check = self.order_manager.validate_order(
+            self.connector,
+            spend_symbol,
+            amount_q
+        )
+        
+        if not check.passed:
+            print(f"{self._prefix()}⚠ Pre-order validation failed: {check.reason}")
+            if check.details:
+                for key, val in check.details.items():
+                    print(f"{self._prefix()}  {key}: {val}")
+            raise RuntimeError(f"{self._prefix()}Cannot place order: {check.reason}")
 
         # Approve and swap (connector expects amount in spend token units)
         print(f"{self._prefix()}[swap] spending {amount_q} {'BASE' if spend_is_base else 'QUOTE'} token ({spend_symbol}), side={side}")
-        try:
-            tx_hash = self.connector.market_swap(
+        
+        # Submit with retry
+        def submit_swap():
+            return self.connector.market_swap(
                 base_symbol=base,
                 quote_symbol=quote,
                 amount=amount_q,
@@ -226,10 +318,17 @@ class DexSimpleSwap:
                 slippage_bps=self.cfg.slippage_bps,
                 side=side,
             )
-            url = self.connector.tx_explorer_url(tx_hash)
-            print(f"{self._prefix()}Transaction: {url}")
-        except Exception as e:
-            raise RuntimeError(f"{self._prefix()}Swap failed: {e}")
-        return self._finalize(tx_hash)
+        
+        success = self.order_manager.submit_order_with_retry(
+            order,
+            submit_swap,
+            self.connector.tx_explorer_url
+        )
+        
+        if not success:
+            raise RuntimeError(f"{self._prefix()}Swap failed after {self.order_manager.max_retries} attempts")
+        
+        self.order_manager.mark_filled(order)
+        return self._finalize(order.tx_hash)
 
 
