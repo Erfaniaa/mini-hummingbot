@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Iterable
 from decimal import Decimal, getcontext, ROUND_DOWN
 
 from eth_account import Account
@@ -333,16 +333,57 @@ class PancakeSwapConnector(ExchangeConnector):
     def _resolve(self, symbol: str) -> str:
         return self.registry.get(symbol).address
 
-    def get_token_decimals(self, symbol: str) -> int:
-        token = self._resolve(symbol)
-        return int(self.client.get_decimals(token))
+    def _fee_sets(self, edges: int) -> Iterable[List[int]]:
+        tiers = [500, 2500, 10000]
+        if edges <= 0:
+            return []
+        if edges == 1:
+            for t in tiers:
+                yield [t]
+            return
+        # Cartesian product for up to 3 edges (27 combos)
+        def prod(opts: List[int], k: int, prefix: Optional[List[int]] = None):
+            prefix = prefix or []
+            if k == 0:
+                yield list(prefix)
+                return
+            for v in opts:
+                prefix.append(v)
+                yield from prod(opts, k - 1, prefix)
+                prefix.pop()
+        yield from prod(tiers, edges)
 
-    def quantize_amount(self, symbol: str, amount: float) -> float:
-        # Round down to token decimals to avoid overspending
-        getcontext().prec = 50
-        decimals = self.get_token_decimals(symbol)
-        q = (Decimal(str(amount)) * (Decimal(10) ** Decimal(decimals))).to_integral_value(rounding=ROUND_DOWN)
-        return float(q / (Decimal(10) ** Decimal(decimals)))
+    def _try_paths_quote(self, base: str, quote: str, one_base: int) -> Optional[float]:
+        # Direct
+        for fee in [self.default_fee_tier, 500, 2500, 10000]:
+            try:
+                q = self.client.quote_v3_exact_input_single(base, quote, fee, one_base, slippage_bps=0)
+                if q.amount_out > 0:
+                    return self.client.from_wei(quote, q.amount_out)
+            except ContractLogicError:
+                continue
+        # Multi-hop via WBNB / USDC and combos
+        tokens_to_try: List[List[str]] = []
+        wbnb = self.client.DEFAULTS[self.chain_id]["WBNB"]
+        tokens_to_try.append([base, wbnb, quote])
+        # Try USDC if present in registry
+        try:
+            usdc = self._resolve("USDC")
+            tokens_to_try.append([base, usdc, quote])
+            tokens_to_try.append([base, wbnb, usdc, quote])
+            tokens_to_try.append([base, usdc, wbnb, quote])
+        except Exception:
+            pass
+        for path_tokens in tokens_to_try:
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
+                try:
+                    q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), one_base, slippage_bps=0)
+                    if q.amount_out > 0:
+                        return self.client.from_wei(path_tokens[-1], q.amount_out)
+                except ContractLogicError:
+                    continue
+        return None
 
     def get_price(self, base_symbol: str, quote_symbol: str) -> float:
         base = self._resolve(base_symbol)
@@ -350,24 +391,9 @@ class PancakeSwapConnector(ExchangeConnector):
         # Returns quote per 1 base; PancakeSwap quoter is queried with token_in=base -> token_out=quote.
         # When selling base for quote, this is the inverse convention from a SELL UI perspective.
         one_base = 10 ** self.client.get_decimals(base)
-        fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
-        for fee in fee_candidates:
-            try:
-                q = self.client.quote_v3_exact_input_single(base, quote, fee, one_base, slippage_bps=0)
-                if q.amount_out > 0:
-                    # amount_out is quote received for 1 base
-                    return self.client.from_wei(quote, q.amount_out)
-            except ContractLogicError:
-                continue
-        # Try multi-hop via WBNB
-        wbnb = self.client.DEFAULTS[self.chain_id]["WBNB"]
-        for fees in ([500, 500], [500, 2500], [2500, 500], [2500, 2500], [10000, 500], [500, 10000]):
-            try:
-                q = self.client.quote_v3_exact_input_path([base, wbnb, quote], list(fees), one_base, slippage_bps=0)
-                if q.amount_out > 0:
-                    return self.client.from_wei(quote, q.amount_out)
-            except ContractLogicError:
-                continue
+        px = self._try_paths_quote(base, quote, one_base)
+        if px is not None:
+            return px
         raise RuntimeError(f"No route available for {base_symbol}/{quote_symbol}")
 
     def get_balance(self, symbol: str) -> float:
@@ -390,6 +416,17 @@ class PancakeSwapConnector(ExchangeConnector):
         token = self._resolve(symbol)
         return int(self.client.get_allowance(token))
 
+    def quantize_amount(self, symbol: str, amount: float) -> float:
+        # Round down to token decimals to avoid overspending
+        getcontext().prec = 50
+        decimals = self.get_token_decimals(symbol)
+        q = (Decimal(str(amount)) * (Decimal(10) ** Decimal(decimals))).to_integral_value(rounding=ROUND_DOWN)
+        return float(q / (Decimal(10) ** Decimal(decimals)))
+
+    def get_token_decimals(self, symbol: str) -> int:
+        token = self._resolve(symbol)
+        return int(self.client.get_decimals(token))
+
     def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50) -> str:
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
@@ -409,32 +446,47 @@ class PancakeSwapConnector(ExchangeConnector):
         if int(allowance) < int(amount_in_wei):
             self.client.approve(token_in, int(amount_in_wei))
 
-        # Try direct path with provided direction; fall back via WBNB, then try reverse
+        # Try direct path first; then multi-hop via WBNB/USDC; finally reverse
         fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
         try:
+            # Direct pools
             for fee in fee_candidates:
                 try:
                     return self.client.swap_v3_exact_input_single(token_in, token_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
                 except ContractLogicError:
                     continue
+            # Multi-hop sequences
             wbnb = self.client.DEFAULTS[self.chain_id]["WBNB"]
-            for fees in ([500, 500], [500, 2500], [2500, 500], [2500, 2500], [10000, 500], [500, 10000]):
-                try:
-                    return self.client.swap_v3_exact_input_path([token_in, wbnb, token_out], list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
-                except ContractLogicError:
-                    continue
-            # As a last resort, try reverse direction if the primary fails
+            paths: List[List[str]] = [[token_in, wbnb, token_out]]
+            # USDC paths if available
+            try:
+                usdc = self._resolve("USDC")
+                paths.append([token_in, usdc, token_out])
+                paths.append([token_in, wbnb, usdc, token_out])
+                paths.append([token_in, usdc, wbnb, token_out])
+            except Exception:
+                pass
+            for path_tokens in paths:
+                edges = len(path_tokens) - 1
+                for fees in self._fee_sets(edges):
+                    try:
+                        return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
+                    except ContractLogicError:
+                        continue
+            # Reverse fallback
             rev_in, rev_out = token_out, token_in
             for fee in fee_candidates:
                 try:
                     return self.client.swap_v3_exact_input_single(rev_in, rev_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
                 except ContractLogicError:
                     continue
-            for fees in ([500, 500], [500, 2500], [2500, 500], [2500, 2500], [10000, 500], [500, 10000]):
-                try:
-                    return self.client.swap_v3_exact_input_path([rev_in, wbnb, rev_out], list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
-                except ContractLogicError:
-                    continue
+            for path_tokens in ([[rev_in, wbnb, rev_out]]):
+                edges = len(path_tokens) - 1
+                for fees in self._fee_sets(edges):
+                    try:
+                        return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
+                    except ContractLogicError:
+                        continue
         except Exception as e:
             raise RuntimeError(f"Swap failed: {e}")
         raise RuntimeError("No available route for swap")
