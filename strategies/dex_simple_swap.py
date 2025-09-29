@@ -73,11 +73,13 @@ class DexSimpleSwap:
         else:
             # Need price to convert between base and quote basis
             try:
-                print(f"{self._prefix()}[swap] fetching price for {base}/{quote}...")
-                price = self.connector.get_price(base, quote)  # quote per 1 base
-                print(f"{self._prefix()}[swap] price={price}")
-            except Exception as e:
-                raise RuntimeError(f"No route available for {base}/{quote} (price fetch failed)") from e
+                print(f"{self._prefix()}[swap] fetching price({quote}/{base}) fast...")
+                price = self.connector.get_price_fast(base, quote)  # quote per 1 base
+                print(f"{self._prefix()}[swap] price({quote}/{base})={price}")
+            except Exception:
+                print(f"{self._prefix()}[swap] fast price failed; trying full...")
+                price = self.connector.get_price(base, quote)
+                print(f"{self._prefix()}[swap] price({quote}/{base})={price}")
             if price <= 0:
                 raise RuntimeError("Failed to fetch price")
             spend_amt = compute_spend_amount(
@@ -87,12 +89,15 @@ class DexSimpleSwap:
                 spend_is_base=spend_is_base,
             )
 
-        # If price wasn't fetched but we need notional, fetch for display only
+        # If price wasn't fetched but we need notional, fetch for display only (fast)
         if price is None:
             try:
-                price = self.connector.get_price(base, quote)
+                price = self.connector.get_price_fast(base, quote)
             except Exception:
-                price = 0.0
+                try:
+                    price = self.connector.get_price(base, quote)
+                except Exception:
+                    price = 0.0
         notional_quote = compute_quote_value(price or 0.0, spend_amt, spend_is_base)
         print(f"{self._prefix()}[swap] notional≈{notional_quote:.2f} {quote}")
 

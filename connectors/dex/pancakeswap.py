@@ -446,9 +446,9 @@ class PancakeSwapConnector(ExchangeConnector):
             for fees in self._fee_sets(edges):
                 try:
                     q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), one_base, slippage_bps=0)
-                    if q.amount_out > 0:
-                        return self.client.from_wei(quote, q.amount_out)
-                except ContractLogicError:
+                if q.amount_out > 0:
+                    return self.client.from_wei(quote, q.amount_out)
+            except ContractLogicError:
                     continue
         return None
 
@@ -471,6 +471,55 @@ class PancakeSwapConnector(ExchangeConnector):
             except Exception:
                 continue
         raise RuntimeError(f"No route available for {base_symbol}/{quote_symbol}")
+
+    def get_price_fast(self, base_symbol: str, quote_symbol: str) -> float:
+        """Try fastest routes first, then fallback to full search.
+
+        Order:
+        1) v2 getAmountsOut direct and 2-hop WBNB/USDC
+        2) v3 direct 500 fee
+        3) v3 2-hop (WBNB/USDC) with 500-500 fees
+        4) fallback to get_price (full)
+        """
+        base = self._resolve(base_symbol)
+        quote = self._resolve(quote_symbol)
+        one_base = 10 ** self.client.get_decimals(base)
+        # v2 quick try
+        quick_paths = [[base, quote]] + self._limited_paths(base, quote)
+        for path_tokens in quick_paths:
+            try:
+                amounts = self.client.v2_get_amounts_out(path_tokens, int(one_base))
+                out_amount = amounts[-1]
+                if out_amount > 0:
+                    return self.client.from_wei(quote, out_amount)
+            except Exception:
+                pass
+        # v3 direct 500
+        try:
+            q = self.client.quote_v3_exact_input_single(base, quote, 500, int(one_base), slippage_bps=0)
+            if q.amount_out > 0:
+                return self.client.from_wei(quote, q.amount_out)
+        except Exception:
+            pass
+        # v3 2-hop 500-500
+        try:
+            wbnb = self.client.DEFAULTS[self.chain_id]["WBNB"]
+        except Exception:
+            wbnb = None
+        try:
+            usdc = self._resolve("USDC")
+        except Exception:
+            usdc = None
+        for mid in [wbnb, usdc]:
+            if mid and mid not in (base, quote):
+                try:
+                    q = self.client.quote_v3_exact_input_path([base, mid, quote], [500, 500], int(one_base), slippage_bps=0)
+                    if q.amount_out > 0:
+                        return self.client.from_wei(quote, q.amount_out)
+                except Exception:
+                    pass
+        # full
+        return self.get_price(base_symbol, quote_symbol)
 
     def get_balance(self, symbol: str) -> float:
         token = self._resolve(symbol)
@@ -569,8 +618,8 @@ class PancakeSwapConnector(ExchangeConnector):
                 for fees in self._fee_sets(edges):
                     try:
                         return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
-                    except ContractLogicError:
-                        continue
+                except ContractLogicError:
+                    continue
         except Exception as e:
             raise RuntimeError(f"Swap failed: {e}")
         raise RuntimeError("No available route for swap")
