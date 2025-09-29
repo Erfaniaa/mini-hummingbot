@@ -6,6 +6,7 @@ from typing import Optional
 
 from core.keystore import Keystore
 from core.token_registry import TokenRegistry
+from core.settings_store import SettingsStore
 from strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
 from strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
 from strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
@@ -14,6 +15,8 @@ from connectors.dex.pancakeswap import PancakeSwapConnector
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
+SETTINGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "settings"))
+SETTINGS = SettingsStore(SETTINGS_DIR)
 
 
 def prompt(prompt_text: str) -> str:
@@ -160,10 +163,22 @@ def input_float(prompt_text: str) -> Optional[float]:
         return None
 
 
+def _load_defaults(name: str) -> dict:
+    return SETTINGS.load(name) or {}
+
+
+def _save_defaults(name: str, data: dict) -> None:
+    try:
+        SETTINGS.save(name, data)
+    except Exception:
+        pass
+
+
 def run_dex_simple_swap(ks: Keystore) -> None:
     print("\nDex Simple Swap - One-time market swap on PancakeSwap")
+    defaults = _load_defaults("dex_simple_swap")
     # Network
-    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
     try:
         chain_id = int(chain_str)
     except ValueError:
@@ -195,23 +210,30 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print(f"Error unlocking wallet: {e}")
         return
     # Symbols
-    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
-    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
     # Amount
     print("Amount basis: 1) base  2) quote")
-    ab = prompt("Choose 1 or 2: ").strip()
+    ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
     amount_is_base = ab == "1"
     amount: Optional[float] = None
     while amount is None:
-        amount = input_float("Enter amount: ")
-    # Slippage
-    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+        adef = str(defaults.get("amount", ""))
+        amount = input_float(f"Enter amount [{adef}]: ")
+        if amount is None and adef != "":
+            try:
+                amount = float(adef)
+            except Exception:
+                amount = None
+    # Slippage (default 50 bps = 0.5%)
+    sl_def = str(defaults.get("slippage_bps", 50))
+    sl_str = prompt(f"Slippage bps [{sl_def}]: ").strip() or sl_def
     try:
         sl_bps = int(sl_str)
     except ValueError:
@@ -219,6 +241,9 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         return
     # Confirm
     print(f"You will swap {'BASE->QUOTE' if amount_is_base else 'QUOTE->BASE'}: {base} <-> {quote}, amount={amount} ({'base' if amount_is_base else 'quote'}), slippage={sl_bps} bps")
+    use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
+    if use_prev in {"y", "yes"}:
+        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_is_base, "slippage_bps": sl_bps})
     go = prompt("Proceed? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -246,8 +271,9 @@ def run_dex_simple_swap(ks: Keystore) -> None:
 
 def run_dex_batch_swap(ks: Keystore) -> None:
     print("\nDex Batch Swap - Ladder of one-sided simulated limit orders on PancakeSwap")
+    defaults = _load_defaults("dex_batch_swap")
     # Network
-    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
     try:
         chain_id = int(chain_str)
     except ValueError:
@@ -284,33 +310,48 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
-    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
     # Direction and amounts
     print("Amount basis: 1) base  2) quote")
-    ab = prompt("Choose 1 or 2: ").strip()
+    ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
     amount_is_base = ab == "1"
     total_amount: Optional[float] = None
     while total_amount is None:
-        total_amount = input_float("Enter total amount to distribute: ")
+        adef = str(defaults.get("total_amount", ""))
+        total_amount = input_float(f"Enter total amount to distribute [{adef}]: ")
+        if total_amount is None and adef != "":
+            try:
+                total_amount = float(adef)
+            except Exception:
+                total_amount = None
     # Price range
-    min_p: Optional[float] = None
-    max_p: Optional[float] = None
-    while min_p is None:
-        min_p = input_float("Min trigger price (quote per base): ")
-    while max_p is None:
-        max_p = input_float("Max trigger price (quote per base): ")
-    if min_p >= max_p:
-        print("Min price must be less than max price.")
+    min_def = str(defaults.get("min_price", ""))
+    max_def = str(defaults.get("max_price", ""))
+    min_p: Optional[float] = input_float(f"Min trigger price (quote per base) [{min_def}]: ")
+    if min_p is None and min_def != "":
+        try:
+            min_p = float(min_def)
+        except Exception:
+            pass
+    max_p: Optional[float] = input_float(f"Max trigger price (quote per base) [{max_def}]: ")
+    if max_p is None and max_def != "":
+        try:
+            max_p = float(max_def)
+        except Exception:
+            pass
+    if min_p is None or max_p is None or min_p >= max_p:
+        print("Invalid price range.")
         return
     # Count and distribution
-    num_str = prompt("Number of orders: ").strip()
+    num_def = str(defaults.get("num_orders", ""))
+    num_str = prompt(f"Number of orders [{num_def}]: ").strip() or num_def
     try:
         num_orders = int(num_str)
         if num_orders <= 0:
@@ -319,14 +360,16 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print("Invalid number of orders.")
         return
     print("Distribution: 1) uniform  2) bell")
-    dsel = prompt("Choose 1 or 2: ").strip()
-    if dsel not in {"1", "2"}:
+    dsel = prompt(f"Choose 1 or 2 [{'1' if defaults.get('distribution','uniform')=='uniform' else '2'}]: ").strip()
+    if dsel not in {"1", "2", ""}:
         print("Invalid distribution.")
         return
-    distribution = "uniform" if dsel == "1" else "bell"
+    distribution = defaults.get("distribution", "uniform") if dsel == "" else ("uniform" if dsel == "1" else "bell")
     # Interval and slippage
-    iv_str = prompt("Tick interval seconds [1]: ").strip() or "1"
-    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    iv_def = str(defaults.get("interval_seconds", 1))
+    sl_def = str(defaults.get("slippage_bps", 50))
+    iv_str = prompt(f"Tick interval seconds [{iv_def}]: ").strip() or iv_def
+    sl_str = prompt(f"Slippage bps [{sl_def}]: ").strip() or sl_def
     try:
         interval_sec = float(iv_str)
         sl_bps = int(sl_str)
@@ -335,6 +378,21 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         return
     # Confirm
     print(f"Ladder: {num_orders} orders from {min_p} to {max_p}, dist={distribution}, total={total_amount} ({'base' if amount_is_base else 'quote'}) across {len(private_keys)} wallet(s)")
+    use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
+    if use_prev in {"y", "yes"}:
+        _save_defaults("dex_batch_swap", {
+            "chain_id": chain_id,
+            "base": base,
+            "quote": quote,
+            "amount_is_base": amount_is_base,
+            "total_amount": total_amount,
+            "min_price": min_p,
+            "max_price": max_p,
+            "num_orders": num_orders,
+            "distribution": distribution,
+            "interval_seconds": interval_sec,
+            "slippage_bps": sl_bps,
+        })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -371,8 +429,9 @@ def run_dex_batch_swap(ks: Keystore) -> None:
 
 def run_dex_pure_mm(ks: Keystore) -> None:
     print("\nDex Pure Market Making - Symmetric simulated limit orders around mid price")
+    defaults = _load_defaults("dex_pure_market_making")
     # Network
-    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
     try:
         chain_id = int(chain_str)
     except ValueError:
@@ -409,28 +468,47 @@ def run_dex_pure_mm(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
-    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
     # Order amount and basis
     print("Amount basis for each order: 1) base  2) quote")
-    ab = prompt("Choose 1 or 2: ").strip()
+    ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
     amount_is_base = ab == "1"
     order_amount: Optional[float] = None
     while order_amount is None:
-        order_amount = input_float("Per-order amount: ")
+        adef = str(defaults.get("order_amount", ""))
+        order_amount = input_float(f"Per-order amount [{adef}]: ")
+        if order_amount is None and adef != "":
+            try:
+                order_amount = float(adef)
+            except Exception:
+                order_amount = None
     # Levels and refresh
-    up = input_float("Upper step percent per level (e.g., 0.5): ")
-    lo = input_float("Lower step percent per level (e.g., 0.5): ")
+    up_def = str(defaults.get("upper_percent", ""))
+    lo_def = str(defaults.get("lower_percent", ""))
+    up = input_float(f"Upper step percent per level (e.g., 0.5) [{up_def}]: ")
+    if up is None and up_def != "":
+        try:
+            up = float(up_def)
+        except Exception:
+            pass
+    lo = input_float(f"Lower step percent per level (e.g., 0.5) [{lo_def}]: ")
+    if lo is None and lo_def != "":
+        try:
+            lo = float(lo_def)
+        except Exception:
+            pass
     if up is None or lo is None:
         print("Invalid level percents.")
         return
-    lev_str = prompt("Levels each side: ").strip()
+    lev_def = str(defaults.get("levels_each_side", ""))
+    lev_str = prompt(f"Levels each side [{lev_def}]: ").strip() or lev_def
     try:
         levels_each_side = int(lev_str)
         if levels_each_side <= 0:
@@ -438,9 +516,10 @@ def run_dex_pure_mm(ks: Keystore) -> None:
     except ValueError:
         print("Invalid number of levels.")
         return
-    rf_str = prompt("Refresh seconds [60]: ").strip() or "60"
-    ti_str = prompt("Tick interval seconds [1]: ").strip() or "1"
-    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    rf_str = prompt(f"Refresh seconds [{str(defaults.get('refresh_seconds', 60))}]: ").strip() or str(defaults.get("refresh_seconds", 60))
+    ti_str = prompt(f"Tick interval seconds [{str(defaults.get('tick_interval_seconds', 1))}]: ").strip() or str(defaults.get("tick_interval_seconds", 1))
+    sl_def = str(defaults.get("slippage_bps", 50))
+    sl_str = prompt(f"Slippage bps [{sl_def}]: ").strip() or sl_def
     try:
         refresh_seconds = float(rf_str)
         tick_interval = float(ti_str)
@@ -449,6 +528,21 @@ def run_dex_pure_mm(ks: Keystore) -> None:
         print("Invalid refresh/interval/slippage.")
         return
     print(f"Pure MM: {levels_each_side} lvls each side, steps +{up}%/-{lo}% per level, per-order={order_amount} ({'base' if amount_is_base else 'quote'})")
+    use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
+    if use_prev in {"y", "yes"}:
+        _save_defaults("dex_pure_market_making", {
+            "chain_id": chain_id,
+            "base": base,
+            "quote": quote,
+            "amount_is_base": amount_is_base,
+            "order_amount": order_amount,
+            "upper_percent": up,
+            "lower_percent": lo,
+            "levels_each_side": levels_each_side,
+            "refresh_seconds": refresh_seconds,
+            "tick_interval_seconds": tick_interval,
+            "slippage_bps": sl_bps,
+        })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -484,8 +578,9 @@ def run_dex_pure_mm(ks: Keystore) -> None:
 
 def run_dex_dca(ks: Keystore) -> None:
     print("\nDex DCA - Periodically swap to complete total allocation over time")
+    defaults = _load_defaults("dex_dca")
     # Network
-    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
+    chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
     try:
         chain_id = int(chain_str)
     except ValueError:
@@ -522,23 +617,30 @@ def run_dex_dca(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt("Base symbol (e.g., USDT): ").strip().upper()
-    quote = prompt("Quote symbol (e.g., BTCB): ").strip().upper()
+    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
     # Direction and totals
     print("Total amount basis: 1) base  2) quote")
-    ab = prompt("Choose 1 or 2: ").strip()
+    ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
     amount_is_base = ab == "1"
     total_amount: Optional[float] = None
     while total_amount is None:
-        total_amount = input_float("Enter total amount: ")
+        adef = str(defaults.get("total_amount", ""))
+        total_amount = input_float(f"Enter total amount [{adef}]: ")
+        if total_amount is None and adef != "":
+            try:
+                total_amount = float(adef)
+            except Exception:
+                total_amount = None
     # Orders and interval
-    num_str = prompt("Number of DCA orders: ").strip()
+    num_def = str(defaults.get("num_orders", ""))
+    num_str = prompt(f"Number of DCA orders [{num_def}]: ").strip() or num_def
     try:
         num_orders = int(num_str)
         if num_orders <= 0:
@@ -546,27 +648,43 @@ def run_dex_dca(ks: Keystore) -> None:
     except ValueError:
         print("Invalid number of orders.")
         return
-    iv_str = prompt("Interval seconds between orders [60]: ").strip() or "60"
+    iv_def = str(defaults.get("interval_seconds", 60))
+    iv_str = prompt(f"Interval seconds between orders [{iv_def}]: ").strip() or iv_def
     try:
         interval_seconds = float(iv_str)
     except ValueError:
         print("Invalid interval.")
         return
     # Distribution
+    dist_def = defaults.get("distribution", "uniform")
     print("Distribution: 1) uniform  2) random_uniform")
-    dsel = prompt("Choose 1 or 2: ").strip()
-    if dsel not in {"1", "2"}:
+    dsel = prompt(f"Choose 1 or 2 [{'1' if dist_def=='uniform' else '2'}]: ").strip()
+    if dsel not in {"1", "2", ""}:
         print("Invalid distribution.")
         return
-    distribution = "uniform" if dsel == "1" else "random_uniform"
+    distribution = dist_def if dsel == "" else ("uniform" if dsel == "1" else "random_uniform")
     # Slippage
-    sl_str = prompt("Slippage bps [50]: ").strip() or "50"
+    sl_def = str(defaults.get("slippage_bps", 50))
+    sl_str = prompt(f"Slippage bps [{sl_def}]: ").strip() or sl_def
     try:
         sl_bps = int(sl_str)
     except ValueError:
         print("Invalid slippage.")
         return
     print(f"DCA: total={total_amount} ({'base' if amount_is_base else 'quote'}), orders={num_orders}, interval={interval_seconds}s, dist={distribution}, wallets={len(private_keys)}")
+    use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
+    if use_prev in {"y", "yes"}:
+        _save_defaults("dex_dca", {
+            "chain_id": chain_id,
+            "base": base,
+            "quote": quote,
+            "amount_is_base": amount_is_base,
+            "total_amount": total_amount,
+            "num_orders": num_orders,
+            "interval_seconds": interval_seconds,
+            "distribution": distribution,
+            "slippage_bps": sl_bps,
+        })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
