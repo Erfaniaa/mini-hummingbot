@@ -24,7 +24,7 @@ class FakeConnector:
     def approve(self, symbol, amount):
         return "0xapprove"
 
-    def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50):
+    def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50, side=None):
         tx = f"0xswap{len(self._txs)}"
         self._txs.append(tx)
         if amount_is_base:
