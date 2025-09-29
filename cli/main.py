@@ -247,13 +247,20 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     if not base or not quote:
         print("Base and Quote are required.")
         return
+    # Trade side (direction)
+    print("Trade side: 1) Sell base for quote  2) Buy base with quote")
+    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    if ts not in {"1", "2"}:
+        print("Invalid trade side.")
+        return
+    spend_is_base = ts == "1"
     # Amount per wallet
     print("Amount basis: 1) base  2) quote")
     ab = prompt(f"Choose 1 or 2 [{ '1' if defaults.get('amount_is_base', True) else '2' }]: ").strip() or ("1" if defaults.get("amount_is_base", True) else "2")
     if ab not in {"1", "2"}:
         print("Invalid selection.")
         return
-    amount_is_base = ab == "1"
+    amount_basis_is_base = ab == "1"
     amount: Optional[float] = None
     while amount is None:
         adef = str(defaults.get("amount", ""))
@@ -272,12 +279,12 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print("Invalid slippage.")
         return
     # Confirm
-    # Direction summary reflects spend side (SELL base if spending base, BUY base if spending quote)
-    direction = f"{'spend ' + base if amount_is_base else 'spend ' + quote} -> {'receive ' + quote if amount_is_base else 'receive ' + base}"
-    print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_is_base else 'quote'}), slippage={sl_bps} bps")
+    # Direction summary reflects explicit trade side
+    direction = f"{'SELL ' + base + ' for ' + quote if spend_is_base else 'BUY ' + base + ' with ' + quote}"
+    print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_basis_is_base else 'quote'}), slippage={sl_bps} bps")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
-        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_is_base, "slippage_bps": sl_bps})
+        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_basis_is_base, "slippage_bps": sl_bps})
     go = prompt("Proceed? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -292,9 +299,9 @@ def run_dex_simple_swap(ks: Keystore) -> None:
                 base_symbol=base,
                 quote_symbol=quote,
                 amount=amount,
-                amount_is_base=amount_is_base,
-                spend_is_base=amount_is_base,
-                amount_basis_is_base=amount_is_base,
+                amount_is_base=amount_basis_is_base,
+                spend_is_base=spend_is_base,
+                amount_basis_is_base=amount_basis_is_base,
                 slippage_bps=sl_bps,
             )
             strat = DexSimpleSwap(cfg)
