@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
+from strategies.utils import compute_spend_amount
 
 
 @dataclass
@@ -75,10 +76,10 @@ class DexPureMarketMaking:
                 return float(amount)
         return float(amount)
 
-    def _execute(self, amount: float, amount_is_base: bool) -> bool:
+    def _execute(self, spend_amount: float, amount_is_base: bool) -> bool:
         # Quantize to spend token decimals
         spend_symbol = self.cfg.base_symbol if amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, spend_amount)
         if amount_q <= 0:
             return False
         ok_all = True
@@ -107,17 +108,28 @@ class DexPureMarketMaking:
             self._rebuild_levels(px)
             self._last_refresh_ts = now
 
+        # Convert configured per-order amount (user basis) to spend token units using current price
+        spend_amount = compute_spend_amount(
+            price_quote_per_base=px,
+            amount=self.cfg.order_amount,
+            amount_basis_is_base=self.cfg.amount_is_base,
+            spend_is_base=True,  # upper executes sell base, lower executes buy base -> we set per side below
+        )
+
         # Decide side and execute when crosses levels
         fired = False
         for lvl in sorted(self.upper_levels):
             if px >= lvl:
-                if self._execute(self.cfg.order_amount, True):
+                # upper side: sell base -> spend base
+                if self._execute(spend_amount, True):
                     fired = True
                 break
         if not fired:
             for lvl in sorted(self.lower_levels, reverse=True):
                 if px <= lvl:
-                    if self._execute(self.cfg.order_amount, False):
+                    # lower side: buy base -> spend quote; recompute spend for quote side
+                    spend_q = compute_spend_amount(px, self.cfg.order_amount, self.cfg.amount_is_base, False)
+                    if self._execute(spend_q, False):
                         fired = True
                     break
         if int(now) % 1 == 0:

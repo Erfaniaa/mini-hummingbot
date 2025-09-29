@@ -5,6 +5,7 @@ from typing import Optional
 from decimal import Decimal
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
+from strategies.utils import compute_spend_amount
 
 
 @dataclass
@@ -50,16 +51,31 @@ class DexSimpleSwap:
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        # Quantize to token decimals before checks and execution (fallback if not supported)
+        # Determine spend side by user direction
         spend_symbol = base if self.cfg.amount_is_base else quote
-        amount_q = self._quantize(spend_symbol, amount)
+
+        # Fetch current price (quote per 1 base)
+        price = self.connector.get_price(base, quote)
+        if price <= 0:
+            raise RuntimeError("Failed to fetch price")
+
+        # Convert user-entered basis to spend token amount
+        spend_amt = compute_spend_amount(
+            price_quote_per_base=price,
+            amount=amount,
+            amount_basis_is_base=self.cfg.amount_is_base,
+            spend_is_base=self.cfg.amount_is_base,
+        )
+
+        # Quantize to token decimals before checks and execution
+        amount_q = self._quantize(spend_symbol, spend_amt)
 
         # Check balances
         bal = self.connector.get_balance(spend_symbol)
         if bal < amount_q:
             raise RuntimeError(f"Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
 
-        # Approve and swap
+        # Approve and swap (connector expects amount in spend token units)
         try:
             tx_hash = self.connector.market_swap(
                 base_symbol=base,

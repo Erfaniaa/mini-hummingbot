@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
+from strategies.utils import compute_spend_amount
 
 
 @dataclass
@@ -96,10 +97,12 @@ class DexBatchSwap:
                 return float(amount)
         return float(amount)
 
-    def _execute_level(self, li: int, amount: float) -> None:
-        # Quantize amount based on spend token decimals
+    def _execute_level(self, li: int, amount_user_basis: float, price: float) -> None:
+        # Convert user basis amount to spend token
         spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, amount)
+        spend_is_base = self.cfg.amount_is_base
+        spend_amt = compute_spend_amount(price, amount_user_basis, self.cfg.amount_is_base, spend_is_base)
+        amount_q = self._quantize(spend_symbol, spend_amt)
         if amount_q <= 0:
             self.done[li] = True
             self.remaining[li] = 0.0
@@ -140,7 +143,7 @@ class DexBatchSwap:
             if done or amt <= 0:
                 continue
             if self._should_execute(price, lvl):
-                self._execute_level(i, amt)
+                self._execute_level(i, amt, price)
 
         remaining_levels = sum(1 for d in self.done if not d)
         if self._tick_counter % 1 == 0:

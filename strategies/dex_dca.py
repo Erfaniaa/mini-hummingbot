@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
+from strategies.utils import compute_spend_amount
 
 
 @dataclass
@@ -63,10 +64,10 @@ class DexDCA:
                 return float(amount)
         return float(amount)
 
-    def _execute(self, amount: float) -> bool:
+    def _execute(self, spend_amount: float) -> bool:
         # Quantize by spend token decimals
         spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, spend_amount)
         if amount_q <= 0:
             return False
         ok_all = True
@@ -92,22 +93,24 @@ class DexDCA:
         if amount <= 0.0:
             self.stop()
             return
-        # Quantize once for state updates and execution
-        spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, amount)
-        if amount_q <= 0.0:
-            self.stop()
+        # Convert user basis chunk to spend token using current price
+        try:
+            px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+        except Exception:
+            px = None
+        if not px or px <= 0:
             return
-        ok = self._execute(amount_q)
+        spend_amt = compute_spend_amount(px, amount, self.cfg.amount_is_base, self.cfg.amount_is_base)
+        ok = self._execute(spend_amt)
         if ok:
-            self.remaining = max(0.0, self.remaining - amount_q)
+            self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] executed={ok} chunk={amount_q:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+            print(f"[dex_dca] executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
         except Exception:
-            print(f"[dex_dca] executed={ok} chunk={amount_q:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
+            print(f"[dex_dca] executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
 
     def _on_error(self, e: Exception) -> None:
         print(f"[dex_dca] Error: {e}")
