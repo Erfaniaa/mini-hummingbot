@@ -113,7 +113,7 @@ class PeriodicReporter:
         print(f"{prefix} {self.base_symbol}: {snapshot.base_balance:.6f}")
         print(f"{prefix} {self.quote_symbol}: {snapshot.quote_balance:.2f}")
         if snapshot.base_price:
-            print(f"{prefix} Price: {snapshot.base_price:.8f} {self.quote_symbol}/{self.base_symbol}")
+            print(f"{prefix} Price: {snapshot.base_price:.8f} {self.base_symbol}/{self.quote_symbol}")
         print(f"{prefix} Portfolio Value: {snapshot.portfolio_value_quote:.2f} {self.quote_symbol}")
         print()
     
@@ -137,7 +137,7 @@ class PeriodicReporter:
         print(f"{prefix} {self.quote_symbol}: {snapshot.quote_balance:.2f} ({quote_change:+.2f})")
         
         if snapshot.base_price:
-            print(f"{prefix} Current Price: {snapshot.base_price:.8f} {self.quote_symbol}/{self.base_symbol}")
+            print(f"{prefix} Current Price: {snapshot.base_price:.8f} {self.base_symbol}/{self.quote_symbol}")
         
         print(f"{prefix} Portfolio Value: {snapshot.portfolio_value_quote:.2f} {self.quote_symbol}")
         print(f"{prefix} P&L: {pnl:+.2f} {self.quote_symbol} ({pnl_pct:+.2f}%)")

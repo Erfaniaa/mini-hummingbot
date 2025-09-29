@@ -209,7 +209,7 @@ class OrderManager:
         print(f"{prefix}   Side: {side_str} {order.base_symbol}/{order.quote_symbol}")
         print(f"{prefix}   Amount: {order.amount} {order.quote_symbol if order.side == 'buy' else order.base_symbol}")
         if order.price:
-            print(f"{prefix}   Price: {order.price:.8f} {order.quote_symbol}/{order.base_symbol}")
+            print(f"{prefix}   Price: {order.price:.8f} {order.base_symbol}/{order.quote_symbol}")
         print(f"{prefix}   Reason: {order.reason}")
     
     def _log_success(self, order: OrderInfo):
