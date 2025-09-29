@@ -61,18 +61,23 @@ class DexSimpleSwap:
         # Determine spend symbol
         spend_symbol = base if spend_is_base else quote
 
-        # Fetch current price (quote per 1 base)
-        price = self.connector.get_price(base, quote)
-        if price <= 0:
-            raise RuntimeError("Failed to fetch price")
-
         # Convert user-entered basis to spend token amount
-        spend_amt = compute_spend_amount(
-            price_quote_per_base=price,
-            amount=amount,
-            amount_basis_is_base=basis_is_base,
-            spend_is_base=spend_is_base,
-        )
+        if basis_is_base == spend_is_base:
+            spend_amt = amount
+        else:
+            # Need price to convert between base and quote basis
+            try:
+                price = self.connector.get_price(base, quote)  # quote per 1 base
+            except Exception as e:
+                raise RuntimeError("Failed to fetch price for basis conversion") from e
+            if price <= 0:
+                raise RuntimeError("Failed to fetch price")
+            spend_amt = compute_spend_amount(
+                price_quote_per_base=price,
+                amount=amount,
+                amount_basis_is_base=basis_is_base,
+                spend_is_base=spend_is_base,
+            )
 
         # Quantize to token decimals before checks and execution
         amount_q = self._quantize(spend_symbol, spend_amt)
