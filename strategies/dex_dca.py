@@ -233,11 +233,12 @@ class DexDCA:
             self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
         
-        # Log status
+        # Log status with total balances across all wallets
         try:
-            b = self.connectors[0].get_balance(self.cfg.base_symbol)
-            q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
+            total_base = sum(conn.get_balance(self.cfg.base_symbol) for conn in self.connectors)
+            total_quote = sum(conn.get_balance(self.cfg.quote_symbol) for conn in self.connectors)
+            portfolio_value = total_quote + (total_base * px)
+            print(f"[dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
         except Exception:
             print(f"[dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left}")
 

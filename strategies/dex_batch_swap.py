@@ -233,12 +233,20 @@ class DexBatchSwap:
         self.remaining[li] = 0.0
 
     def _balances_summary(self) -> str:
+        """Return summary of total balances across all wallets with USDT value."""
         try:
-            b = self.connectors[0].get_balance(self.cfg.base_symbol)
-            q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            return f"balance[{self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}]"
+            total_base = sum(conn.get_balance(self.cfg.base_symbol) for conn in self.connectors)
+            total_quote = sum(conn.get_balance(self.cfg.quote_symbol) for conn in self.connectors)
+            
+            # Get current price for portfolio value
+            try:
+                px = self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
+                portfolio_value = total_quote + (total_base * px)
+                return f"Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT"
+            except Exception:
+                return f"Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f}"
         except Exception:
-            return "balance[unavailable]"
+            return "Total balance: unavailable"
 
     def _on_tick(self) -> None:
         """Tick handler with resilience - continues even if individual operations fail."""

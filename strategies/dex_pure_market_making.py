@@ -288,9 +288,10 @@ class DexPureMarketMaking:
                 status_parts.append(f"Next BUY: {nearest_lower:.8f} (-{dist_down:.2f}%)")
             
             try:
-                b = self.connectors[0].get_balance(self.cfg.base_symbol)
-                q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
+                total_base = sum(conn.get_balance(self.cfg.base_symbol) for conn in self.connectors)
+                total_quote = sum(conn.get_balance(self.cfg.quote_symbol) for conn in self.connectors)
+                portfolio_value = total_quote + (total_base * px)
+                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
             except Exception:
                 print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)}")
 
