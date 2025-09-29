@@ -72,12 +72,45 @@ class PancakeSwapClient:
         },
         {
             "inputs": [
+                {"internalType": "address", "name": "tokenIn", "type": "address"},
+                {"internalType": "address", "name": "tokenOut", "type": "address"},
+                {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                {"internalType": "uint24", "name": "fee", "type": "uint24"},
+                {"internalType": "uint160", "name": "sqrtPriceLimitX96", "type": "uint160"},
+            ],
+            "name": "quoteExactOutputSingle",
+            "outputs": [
+                {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                {"internalType": "uint160", "name": "sqrtPriceX96After", "type": "uint160"},
+                {"internalType": "uint32", "name": "initializedTicksCrossed", "type": "uint32"},
+                {"internalType": "uint256", "name": "gasEstimate", "type": "uint256"},
+            ],
+            "stateMutability": "view",
+            "type": "function",
+        },
+        {
+            "inputs": [
                 {"internalType": "bytes", "name": "path", "type": "bytes"},
                 {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
             ],
             "name": "quoteExactInput",
             "outputs": [
                 {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                {"internalType": "uint160", "name": "sqrtPriceX96After", "type": "uint160"},
+                {"internalType": "uint32", "name": "initializedTicksCrossed", "type": "uint32"},
+                {"internalType": "uint256", "name": "gasEstimate", "type": "uint256"},
+            ],
+            "stateMutability": "view",
+            "type": "function",
+        },
+        {
+            "inputs": [
+                {"internalType": "bytes", "name": "path", "type": "bytes"},
+                {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+            ],
+            "name": "quoteExactOutput",
+            "outputs": [
+                {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
                 {"internalType": "uint160", "name": "sqrtPriceX96After", "type": "uint160"},
                 {"internalType": "uint32", "name": "initializedTicksCrossed", "type": "uint32"},
                 {"internalType": "uint256", "name": "gasEstimate", "type": "uint256"},
@@ -104,10 +137,33 @@ class PancakeSwapClient:
         },
         {
             "inputs": [
+                {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                {"internalType": "uint256", "name": "amountInMax", "type": "uint256"},
+                {"internalType": "address[]", "name": "path", "type": "address[]"},
+                {"internalType": "address", "name": "to", "type": "address"},
+                {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+            ],
+            "name": "swapTokensForExactTokens",
+            "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+            "stateMutability": "nonpayable",
+            "type": "function",
+        },
+        {
+            "inputs": [
                 {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
                 {"internalType": "address[]", "name": "path", "type": "address[]"},
             ],
             "name": "getAmountsOut",
+            "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+            "stateMutability": "view",
+            "type": "function",
+        },
+        {
+            "inputs": [
+                {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                {"internalType": "address[]", "name": "path", "type": "address[]"},
+            ],
+            "name": "getAmountsIn",
             "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
             "stateMutability": "view",
             "type": "function",
@@ -142,6 +198,29 @@ class PancakeSwapClient:
             "inputs": [
                 {
                     "components": [
+                        {"internalType": "address", "name": "tokenIn", "type": "address"},
+                        {"internalType": "address", "name": "tokenOut", "type": "address"},
+                        {"internalType": "uint24", "name": "fee", "type": "uint24"},
+                        {"internalType": "address", "name": "recipient", "type": "address"},
+                        {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+                        {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                        {"internalType": "uint256", "name": "amountInMaximum", "type": "uint256"},
+                        {"internalType": "uint160", "name": "sqrtPriceLimitX96", "type": "uint160"},
+                    ],
+                    "internalType": "struct ISwapRouter.ExactOutputSingleParams",
+                    "name": "params",
+                    "type": "tuple",
+                }
+            ],
+            "name": "exactOutputSingle",
+            "outputs": [{"internalType": "uint256", "name": "amountIn", "type": "uint256"}],
+            "stateMutability": "payable",
+            "type": "function",
+        },
+        {
+            "inputs": [
+                {
+                    "components": [
                         {"internalType": "bytes", "name": "path", "type": "bytes"},
                         {"internalType": "address", "name": "recipient", "type": "address"},
                         {"internalType": "uint256", "name": "deadline", "type": "uint256"},
@@ -155,6 +234,26 @@ class PancakeSwapClient:
             ],
             "name": "exactInput",
             "outputs": [{"internalType": "uint256", "name": "amountOut", "type": "uint256"}],
+            "stateMutability": "payable",
+            "type": "function",
+        },
+        {
+            "inputs": [
+                {
+                    "components": [
+                        {"internalType": "bytes", "name": "path", "type": "bytes"},
+                        {"internalType": "address", "name": "recipient", "type": "address"},
+                        {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+                        {"internalType": "uint256", "name": "amountOut", "type": "uint256"},
+                        {"internalType": "uint256", "name": "amountInMaximum", "type": "uint256"},
+                    ],
+                    "internalType": "struct ISwapRouter.ExactOutputParams",
+                    "name": "params",
+                    "type": "tuple",
+                }
+            ],
+            "name": "exactOutput",
+            "outputs": [{"internalType": "uint256", "name": "amountIn", "type": "uint256"}],
             "stateMutability": "payable",
             "type": "function",
         },
@@ -305,6 +404,12 @@ class PancakeSwapClient:
         path = [self.to_checksum(t) for t in path_tokens]
         return list(self._v2_router.functions.getAmountsOut(int(amount_in), path).call())
 
+    def v2_get_amounts_in(self, path_tokens: List[str], amount_out: int) -> List[int]:
+        if self._v2_router is None:
+            raise RuntimeError("V2 Router not configured for this chain/network")
+        path = [self.to_checksum(t) for t in path_tokens]
+        return list(self._v2_router.functions.getAmountsIn(int(amount_out), path).call())
+
     def v2_swap_exact_tokens_for_tokens(self, path_tokens: List[str], amount_in: int, min_out: int, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
         self._require_account()
         if self._v2_router is None:
@@ -313,6 +418,19 @@ class PancakeSwapClient:
         to_addr = self.to_checksum(self.address)
         deadline = int(time.time()) + 600
         tx = self._v2_router.functions.swapExactTokensForTokens(int(amount_in), int(min_out), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
+        if gas_limit is None:
+            gas_limit = int(self.web3.eth.estimate_gas(tx))
+        tx["gas"] = gas_limit
+        return self._sign_and_send(tx)
+
+    def v2_swap_tokens_for_exact_tokens(self, path_tokens: List[str], amount_out: int, amount_in_max: int, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
+        self._require_account()
+        if self._v2_router is None:
+            raise RuntimeError("V2 Router not configured for this chain/network")
+        path = [self.to_checksum(t) for t in path_tokens]
+        to_addr = self.to_checksum(self.address)
+        deadline = int(time.time()) + 600
+        tx = self._v2_router.functions.swapTokensForExactTokens(int(amount_out), int(amount_in_max), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
         if gas_limit is None:
             gas_limit = int(self.web3.eth.estimate_gas(tx))
         tx["gas"] = gas_limit
@@ -390,6 +508,9 @@ class PancakeSwapConnector(ExchangeConnector):
 
     def _fee_sets(self, edges: int) -> Iterable[List[int]]:
         tiers = [500, 2500, 10000]
+        # include 0.01% tier (100) as Pancake V3 supports it for some pairs
+        if 100 not in tiers:
+            tiers = [100] + tiers
         if edges <= 0:
             return []
         if edges == 1:
@@ -431,9 +552,92 @@ class PancakeSwapConnector(ExchangeConnector):
             paths.append([token_in, usdc, wbnb, token_out])
         return paths
 
+    def _quote_amount_out_limited(self, token_in: str, token_out: str, amount_in_wei: int) -> int:
+        """Best-effort amountOut using limited routes (fast). Returns wei."""
+        # v3 direct (common fees)
+        for fee in [self.default_fee_tier, 100, 500, 2500, 10000]:
+            try:
+                q = self.client.quote_v3_exact_input_single(token_in, token_out, int(fee), int(amount_in_wei), slippage_bps=0)
+                if int(q.amount_out) > 0:
+                    return int(q.amount_out)
+            except Exception:
+                continue
+        # v3 limited paths
+        for path_tokens in self._limited_paths(token_in, token_out):
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
+                try:
+                    q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=0)
+                    if int(q.amount_out) > 0:
+                        return int(q.amount_out)
+                except Exception:
+                    continue
+        # v2 limited paths
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                amounts = self.client.v2_get_amounts_out(path_tokens, int(amount_in_wei))
+                out_amount = int(amounts[-1])
+                if out_amount > 0:
+                    return out_amount
+            except Exception:
+                continue
+        return 0
+
+    def get_price_side(self, base_symbol: str, quote_symbol: str, side: str, fast: bool = False) -> float:
+        """Return price as BASE/QUOTE in the user's conventional sense (quote per 1 base).
+
+        side: 'sell' (spend base → receive quote) or 'buy' (spend quote → receive base)
+        If fast=True, only limited/quick routes are used; otherwise full get_price fallback is applied.
+        """
+        base = self._resolve(base_symbol)
+        quote = self._resolve(quote_symbol)
+        if side not in ("sell", "buy"):
+            raise ValueError("side must be 'sell' or 'buy'")
+        if side == "sell":
+            # tokenIn = base; we want quote_per_base (QUOTE/BASE) directly
+            one_base = 10 ** self.client.get_decimals(base)
+            if fast:
+                out_q = self._quote_amount_out_limited(base, quote, int(one_base))
+                if out_q <= 0:
+                    raise RuntimeError("No route for fast sell price")
+                quote_per_base = self.client.from_wei(quote, out_q)
+            else:
+                qpb = self._try_paths_quote(base, quote, int(one_base))
+                if qpb is None:
+                    # try v2 limited
+                    out_q = self._quote_amount_out_limited(base, quote, int(one_base))
+                    if out_q <= 0:
+                        raise RuntimeError("No route for sell price")
+                    quote_per_base = self.client.from_wei(quote, out_q)
+                else:
+                    quote_per_base = float(qpb)
+            if quote_per_base <= 0:
+                raise RuntimeError("Invalid sell price")
+            return quote_per_base
+        else:
+            # side == 'buy': tokenIn = quote; compute base_per_quote then invert to quote_per_base
+            one_quote = 10 ** self.client.get_decimals(quote)
+            if fast:
+                out_b = self._quote_amount_out_limited(quote, base, int(one_quote))
+                if out_b <= 0:
+                    raise RuntimeError("No route for fast buy price")
+                base_per_quote = self.client.from_wei(base, out_b)
+            else:
+                # reuse v3/v2 limited by swapping token_in/out
+                out_b = self._quote_amount_out_limited(quote, base, int(one_quote))
+                if out_b <= 0:
+                    # As a slow fallback, try full get_price (quote/base)
+                    qpb = self.get_price(base_symbol, quote_symbol)
+                    base_per_quote = 1.0 / float(qpb)
+                else:
+                    base_per_quote = self.client.from_wei(base, out_b)
+            if base_per_quote <= 0:
+                raise RuntimeError("Invalid buy price")
+            quote_per_base = 1.0 / base_per_quote
+            return quote_per_base
     def _try_paths_quote(self, base: str, quote: str, one_base: int) -> Optional[float]:
         # Direct
-        for fee in [self.default_fee_tier, 500, 2500, 10000]:
+        for fee in [self.default_fee_tier, 100, 500, 2500, 10000]:
             try:
                 q = self.client.quote_v3_exact_input_single(base, quote, fee, one_base, slippage_bps=0)
                 if q.amount_out > 0:
@@ -446,9 +650,9 @@ class PancakeSwapConnector(ExchangeConnector):
             for fees in self._fee_sets(edges):
                 try:
                     q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), one_base, slippage_bps=0)
-                if q.amount_out > 0:
-                    return self.client.from_wei(quote, q.amount_out)
-            except ContractLogicError:
+                    if q.amount_out > 0:
+                        return self.client.from_wei(quote, q.amount_out)
+                except ContractLogicError:
                     continue
         return None
 
@@ -494,7 +698,13 @@ class PancakeSwapConnector(ExchangeConnector):
                     return self.client.from_wei(quote, out_amount)
             except Exception:
                 pass
-        # v3 direct 500
+        # v3 direct 100 then 500
+        try:
+            q = self.client.quote_v3_exact_input_single(base, quote, 100, int(one_base), slippage_bps=0)
+            if q.amount_out > 0:
+                return self.client.from_wei(quote, q.amount_out)
+        except Exception:
+            pass
         try:
             q = self.client.quote_v3_exact_input_single(base, quote, 500, int(one_base), slippage_bps=0)
             if q.amount_out > 0:
@@ -552,13 +762,20 @@ class PancakeSwapConnector(ExchangeConnector):
         token = self._resolve(symbol)
         return int(self.client.get_decimals(token))
 
-    def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50) -> str:
+    def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50, side: Optional[str] = None) -> str:
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
-        # If amount_is_base: we spend base to get quote. Otherwise we spend quote to get base.
-        token_in_symbol = base_symbol if amount_is_base else quote_symbol
-        token_in = base if amount_is_base else quote
-        token_out = quote if amount_is_base else base
+        # Determine direction: 'side' takes precedence if provided
+        if side is not None:
+            if side not in ("sell", "buy"):
+                raise ValueError("side must be 'sell' or 'buy'")
+            spend_is_base = True if side == "sell" else False
+        else:
+            spend_is_base = bool(amount_is_base)
+        # If spending base: spend base to get quote. Otherwise spend quote to get base.
+        token_in_symbol = base_symbol if spend_is_base else quote_symbol
+        token_in = base if spend_is_base else quote
+        token_out = quote if spend_is_base else base
         amount_q = self.quantize_amount(token_in_symbol, amount)
         amount_in_wei = self.client.to_wei(token_in, amount_q)
 
@@ -571,61 +788,282 @@ class PancakeSwapConnector(ExchangeConnector):
         if int(allowance) < int(amount_in_wei):
             self.client.approve(token_in, int(amount_in_wei))
 
-        # Try direct path first; then multi-hop via WBNB/USDC; then v2; finally reverse
-        fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
-        try:
-            # Direct pools
-            for fee in fee_candidates:
-                try:
-                    return self.client.swap_v3_exact_input_single(token_in, token_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
-                except ContractLogicError:
-                    continue
-            # Multi-hop sequences using limited intermediaries
-            for path_tokens in self._limited_paths(token_in, token_out):
-                edges = len(path_tokens) - 1
-                for fees in self._fee_sets(edges):
-                    try:
-                        return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
-                    except ContractLogicError:
-                        continue
-            # V2 fallback swaps
-            # Ensure allowance to v2 router
+        # Quote all candidates and pick best expected out
+        fee_candidates = [100, self.default_fee_tier, 500, 2500, 10000]
+        best_kind = None  # 'v3_single' | 'v3_path' | 'v2'
+        best_value = 0
+        best_data = None
+        # V3 direct
+        for fee in fee_candidates:
             try:
-                v2_router = self.client._v2_router_address
-                if v2_router:
-                    current_allowance = self.client.get_allowance(token_in, spender=v2_router)
-                    if int(current_allowance) < int(amount_in_wei):
-                        self.client.approve(token_in, int(amount_in_wei), spender=v2_router)
-                    for path_tokens in self._limited_paths(token_in, token_out):
-                        try:
-                            amounts = self.client.v2_get_amounts_out(path_tokens, int(amount_in_wei))
-                            min_out = int(amounts[-1]) * (10_000 - int(slippage_bps)) // 10_000
-                            if min_out > 0:
-                                return self.client.v2_swap_exact_tokens_for_tokens(path_tokens, int(amount_in_wei), int(min_out))
-                        except Exception:
-                            continue
+                q = self.client.quote_v3_exact_input_single(token_in, token_out, int(fee), int(amount_in_wei), slippage_bps=0)
+                out_amt = int(q.amount_out)
+                if out_amt > best_value:
+                    best_value = out_amt
+                    best_kind = 'v3_single'
+                    best_data = {'fee': int(fee)}
             except Exception:
-                pass
-            # Reverse fallback
-            rev_in, rev_out = token_out, token_in
-            for fee in fee_candidates:
+                continue
+        # V3 limited paths
+        for path_tokens in self._limited_paths(token_in, token_out):
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
                 try:
-                    return self.client.swap_v3_exact_input_single(rev_in, rev_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
-                except ContractLogicError:
+                    q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=0)
+                    out_amt = int(q.amount_out)
+                    if out_amt > best_value:
+                        best_value = out_amt
+                        best_kind = 'v3_path'
+                        best_data = {'tokens': list(path_tokens), 'fees': list(fees)}
+                except Exception:
                     continue
-            for path_tokens in self._limited_paths(rev_in, rev_out):
-                edges = len(path_tokens) - 1
-                for fees in self._fee_sets(edges):
-                    try:
-                        return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
-                except ContractLogicError:
-                    continue
+        # V2 limited paths
+        v2_best = None
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                amounts = self.client.v2_get_amounts_out(path_tokens, int(amount_in_wei))
+                out_amt = int(amounts[-1])
+                if out_amt > best_value:
+                    best_value = out_amt
+                    best_kind = 'v2'
+                    v2_best = list(path_tokens)
+            except Exception:
+                continue
+        if best_kind is None or best_value <= 0:
+            raise RuntimeError("No available route for swap")
+        # Execute chosen route
+        try:
+            if best_kind == 'v3_single':
+                fee = int(best_data['fee'])  # type: ignore[index]
+                return self.client.swap_v3_exact_input_single(token_in, token_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
+            if best_kind == 'v3_path':
+                tokens = list(best_data['tokens'])  # type: ignore[index]
+                fees = list(best_data['fees'])      # type: ignore[index]
+                return self.client.swap_v3_exact_input_path(tokens, fees, int(amount_in_wei), slippage_bps=slippage_bps)
+            # V2 path
+            v2_router = self.client._v2_router_address
+            if v2_router:
+                current_allowance = self.client.get_allowance(token_in, spender=v2_router)
+                if int(current_allowance) < int(amount_in_wei):
+                    self.client.approve(token_in, int(amount_in_wei), spender=v2_router)
+            amounts = self.client.v2_get_amounts_out(v2_best, int(amount_in_wei))  # type: ignore[arg-type]
+            min_out = int(amounts[-1]) * (10_000 - int(slippage_bps)) // 10_000
+            return self.client.v2_swap_exact_tokens_for_tokens(v2_best, int(amount_in_wei), int(min_out))  # type: ignore[arg-type]
         except Exception as e:
             raise RuntimeError(f"Swap failed: {e}")
-        raise RuntimeError("No available route for swap")
 
     def tx_explorer_url(self, tx_hash: str) -> str:
         base = "https://bscscan.com/tx/" if self.chain_id == 56 else "https://testnet.bscscan.com/tx/"
         return f"{base}{tx_hash}"
+
+    # ----------------------------
+    # Quotes (best-effort using same order as market_swap)
+    # ----------------------------
+    def quote_best_out(self, token_in_symbol: str, token_out_symbol: str, amount_in: float) -> int:
+        """Return best out amount (wei) using the same route order as market_swap.
+
+        token symbols follow connector convention (e.g., "BTCB", "USDT").
+        amount_in is in human units (not wei) for token_in_symbol.
+        """
+        token_in = self._resolve(token_in_symbol)
+        token_out = self._resolve(token_out_symbol)
+        amount_in_wei = self.client.to_wei(token_in, self.quantize_amount(token_in_symbol, float(amount_in)))
+
+        # v3 direct
+        for fee in [self.default_fee_tier, 500, 2500, 10000]:
+            try:
+                q = self.client.quote_v3_exact_input_single(token_in, token_out, int(fee), int(amount_in_wei), slippage_bps=0)
+                if int(q.amount_out) > 0:
+                    return int(q.amount_out)
+            except Exception:
+                continue
+        # v3 limited paths
+        for path_tokens in self._limited_paths(token_in, token_out):
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
+                try:
+                    q = self.client.quote_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=0)
+                    if int(q.amount_out) > 0:
+                        return int(q.amount_out)
+                except Exception:
+                    continue
+        # v2 limited paths
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                amounts = self.client.v2_get_amounts_out(path_tokens, int(amount_in_wei))
+                out_amount = int(amounts[-1])
+                if out_amount > 0:
+                    return out_amount
+            except Exception:
+                continue
+        return 0
+
+    # ----------------------------
+    # Exact-output helpers (target amount_out in wei)
+    # ----------------------------
+    def quote_best_in_for_exact_out(self, token_in_symbol: str, token_out_symbol: str, amount_out_wei: int) -> int:
+        """Return required input amount (wei) to receive target amount_out (wei) via v3/v2 limited paths.
+
+        Tries v3 direct/path quoteExactOutput first (including 0.01% fee), then falls back to v2 getAmountsIn.
+        Returns 0 if no path.
+        """
+        token_in = self._resolve(token_in_symbol)
+        token_out = self._resolve(token_out_symbol)
+        best_in = 0
+        # v3 direct exact output
+        for fee in [100, self.default_fee_tier, 500, 2500, 10000]:
+            try:
+                amt_in, _, _, _ = self.client._v3_quoter.functions.quoteExactOutputSingle(
+                    self.client.to_checksum(token_in),
+                    self.client.to_checksum(token_out),
+                    int(amount_out_wei),
+                    int(fee),
+                    0,
+                ).call()
+                amt_in = int(amt_in)
+                if amt_in > 0 and (best_in == 0 or amt_in < best_in):
+                    best_in = amt_in
+            except Exception:
+                continue
+        # v3 path exact output (path must be reversed: tokenOut -> tokenIn)
+        for path_tokens in self._limited_paths(token_in, token_out):
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
+                try:
+                    # Reverse path and fees for exact-output
+                    reversed_path = list(reversed(path_tokens))
+                    reversed_fees = list(reversed(list(fees)))
+                    path = self.client._encode_v3_path(reversed_path, reversed_fees)
+                    amt_in, _, _, _ = self.client._v3_quoter.functions.quoteExactOutput(path, int(amount_out_wei)).call()
+                    amt_in = int(amt_in)
+                    if amt_in > 0 and (best_in == 0 or amt_in < best_in):
+                        best_in = amt_in
+                except Exception:
+                    continue
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                amounts = self.client.v2_get_amounts_in(path_tokens, int(amount_out_wei))
+                amt_in = int(amounts[0])
+                if amt_in > 0 and (best_in == 0 or amt_in < best_in):
+                    best_in = amt_in
+            except Exception:
+                continue
+        return best_in
+
+    def estimate_in_for_exact_out(self, token_in_symbol: str, token_out_symbol: str, amount_out_human: float) -> float:
+        """Return estimated input amount in human units to receive target output amount (human units).
+
+        Uses v3/v2 quoter helpers. Returns 0.0 if no path.
+        """
+        token_out = self._resolve(token_out_symbol)
+        out_wei = self.client.to_wei(token_out, self.quantize_amount(token_out_symbol, float(amount_out_human)))
+        req_in_wei = self.quote_best_in_for_exact_out(token_in_symbol, token_out_symbol, int(out_wei))
+        if req_in_wei <= 0:
+            return 0.0
+        token_in = self._resolve(token_in_symbol)
+        return self.client.from_wei(token_in, int(req_in_wei))
+
+    def swap_exact_out(self, token_in_symbol: str, token_out_symbol: str, target_out_amount: float, slippage_bps: int = 50) -> str:
+        """Swap to receive an exact target amount_out in token_out_symbol.
+
+        Uses v2 limited paths with getAmountsIn + swapTokensForExactTokens.
+        amount_in_max is padded by slippage_bps.
+        """
+        token_in = self._resolve(token_in_symbol)
+        token_out = self._resolve(token_out_symbol)
+        amount_out_wei = self.client.to_wei(token_out, self.quantize_amount(token_out_symbol, float(target_out_amount)))
+        required_in = self.quote_best_in_for_exact_out(token_in_symbol, token_out_symbol, int(amount_out_wei))
+        if required_in <= 0:
+            # Fallback: estimate via side-aware price and pad by slippage
+            try:
+                side = "sell" if token_in_symbol.upper() == token_in_symbol.upper() and token_in_symbol.upper() == token_in_symbol.upper() else "sell"
+                # for exact-out: if token_in is base -> sell, else buy
+                base_sym = token_in_symbol if token_in_symbol.upper() == token_in_symbol.upper() and token_in_symbol.upper() != token_out_symbol.upper() else token_out_symbol
+                # simpler: decide based on symbols passed to method
+            except Exception:
+                pass
+            # decide spend side by comparing against symbols
+            spend_is_base = (token_in_symbol.upper() == token_out_symbol.upper()) is False and (token_in_symbol.upper() == token_in_symbol.upper())
+            # Use get_price_side for an estimate
+            try:
+                if spend_is_base:
+                    qpb = self.get_price_side(token_in_symbol, token_out_symbol, side="sell", fast=True)
+                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) / float(qpb)
+                else:
+                    qpb = self.get_price_side(token_out_symbol, token_in_symbol, side="buy", fast=True)
+                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) * float(qpb)
+            except Exception:
+                # final fallback, try full price
+                if spend_is_base:
+                    qpb = self.get_price(token_in_symbol, token_out_symbol)
+                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) / float(qpb)
+                else:
+                    qpb = self.get_price(token_out_symbol, token_in_symbol)
+                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) * float(qpb)
+            required_in = self.client.to_wei(self._resolve(token_in_symbol), self.quantize_amount(token_in_symbol, float(est_in)))
+        amount_in_max = int(required_in) * (10_000 + int(slippage_bps) + 50) // 10_000
+        # Ensure allowance to v3 router (for v3 exactOutputSingle), and to v2 router (for v2 fallback)
+        try:
+            v3_router = self.client._v3_swap_router_address
+            if v3_router:
+                current_allowance_v3 = self.client.get_allowance(self._resolve(token_in_symbol), spender=v3_router)
+                if int(current_allowance_v3) < int(amount_in_max):
+                    self.client.approve(self._resolve(token_in_symbol), int(amount_in_max), spender=v3_router)
+        except Exception:
+            pass
+        # Ensure allowance to v2 router
+        v2_router = self.client._v2_router_address
+        current_allowance = self.client.get_allowance(token_in, spender=v2_router)
+        if int(current_allowance) < int(amount_in_max):
+            self.client.approve(token_in, int(amount_in_max), spender=v2_router)
+        # Try v3 exactOutputSingle with best fees first
+        for fee in [100, self.default_fee_tier, 500, 2500, 10000]:
+            try:
+                if self.client._v3_router is not None:
+                    to_addr = self.client.to_checksum(self.client.address)
+                    deadline = int(time.time()) + 600
+                    params = (token_in, token_out, int(fee), to_addr, int(deadline), int(amount_out_wei), int(amount_in_max), 0)
+                    tx = self.client._v3_router.functions.exactOutputSingle(params).build_transaction(self.client._default_tx_params())
+                    gas_limit = int(self.client.web3.eth.estimate_gas(tx))
+                    tx["gas"] = gas_limit
+                    tx_hash = self.client._sign_and_send(tx)
+                    return tx_hash
+            except Exception:
+                continue
+        # Try v3 exactOutput via limited multi-hop paths (path must be reversed: tokenOut -> tokenIn)
+        for path_tokens in self._limited_paths(token_in, token_out):
+            edges = len(path_tokens) - 1
+            for fees in self._fee_sets(edges):
+                try:
+                    if self.client._v3_router is not None:
+                        # Reverse path and fees for exact-output
+                        reversed_path = list(reversed(path_tokens))
+                        reversed_fees = list(reversed(list(fees)))
+                        path = self.client._encode_v3_path(reversed_path, reversed_fees)
+                        to_addr = self.client.to_checksum(self.client.address)
+                        deadline = int(time.time()) + 600
+                        params = (path, to_addr, int(deadline), int(amount_out_wei), int(amount_in_max))
+                        tx = self.client._v3_router.functions.exactOutput(params).build_transaction(self.client._default_tx_params())
+                        gas_limit = int(self.client.web3.eth.estimate_gas(tx))
+                        tx["gas"] = gas_limit
+                        tx_hash = self.client._sign_and_send(tx)
+                        return tx_hash
+                except Exception:
+                    continue
+        # Execute on best first limited v2 path where required_in matches
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                amounts = self.client.v2_get_amounts_in(path_tokens, int(amount_out_wei))
+                if int(amounts[0]) == int(required_in):
+                    return self.client.v2_swap_tokens_for_exact_tokens(path_tokens, int(amount_out_wei), int(amount_in_max))
+            except Exception:
+                continue
+        # Fallback on any path yielding same out
+        for path_tokens in self._limited_paths(token_in, token_out):
+            try:
+                return self.client.v2_swap_tokens_for_exact_tokens(path_tokens, int(amount_out_wei), int(amount_in_max))
+            except Exception:
+                continue
+        raise RuntimeError("Exact-output swap failed on all limited v2 paths")
 
 
