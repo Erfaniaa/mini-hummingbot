@@ -272,6 +272,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print("Invalid slippage.")
         return
     # Confirm
+    # Direction summary reflects spend side (SELL base if spending base, BUY base if spending quote)
     direction = f"{'spend ' + base if amount_is_base else 'spend ' + quote} -> {'receive ' + quote if amount_is_base else 'receive ' + base}"
     print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_is_base else 'quote'}), slippage={sl_bps} bps")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
@@ -292,6 +293,8 @@ def run_dex_simple_swap(ks: Keystore) -> None:
                 quote_symbol=quote,
                 amount=amount,
                 amount_is_base=amount_is_base,
+                spend_is_base=amount_is_base,
+                amount_basis_is_base=amount_is_base,
                 slippage_bps=sl_bps,
             )
             strat = DexSimpleSwap(cfg)

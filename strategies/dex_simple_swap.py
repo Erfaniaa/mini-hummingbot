@@ -16,8 +16,11 @@ class DexSimpleSwapConfig:
     base_symbol: str
     quote_symbol: str
     amount: float
-    amount_is_base: bool
+    amount_is_base: bool  # backward-compat; if new fields provided, this may differ
     slippage_bps: int = 50
+    # New optional fields to decouple direction from basis
+    spend_is_base: Optional[bool] = None
+    amount_basis_is_base: Optional[bool] = None
 
 
 class DexSimpleSwap:
@@ -51,8 +54,12 @@ class DexSimpleSwap:
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        # Determine spend side by user direction
-        spend_symbol = base if self.cfg.amount_is_base else quote
+        # Determine basis and spend side (direction)
+        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
+        spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
+
+        # Determine spend symbol
+        spend_symbol = base if spend_is_base else quote
 
         # Fetch current price (quote per 1 base)
         price = self.connector.get_price(base, quote)
@@ -63,8 +70,8 @@ class DexSimpleSwap:
         spend_amt = compute_spend_amount(
             price_quote_per_base=price,
             amount=amount,
-            amount_basis_is_base=self.cfg.amount_is_base,
-            spend_is_base=self.cfg.amount_is_base,
+            amount_basis_is_base=basis_is_base,
+            spend_is_base=spend_is_base,
         )
 
         # Quantize to token decimals before checks and execution
@@ -81,7 +88,7 @@ class DexSimpleSwap:
                 base_symbol=base,
                 quote_symbol=quote,
                 amount=amount_q,
-                amount_is_base=self.cfg.amount_is_base,
+                amount_is_base=spend_is_base,
                 slippage_bps=self.cfg.slippage_bps,
             )
             print("tx:", tx_hash)
