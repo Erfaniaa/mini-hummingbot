@@ -43,6 +43,7 @@ class DexDCA:
         ]
         self.remaining = float(cfg.total_amount)
         self.orders_left = int(cfg.num_orders)
+        self.completed_orders = 0  # Track how many DCA cycles completed
         self._stopped: bool = False
         self._start_time: Optional[float] = None  # Set when strategy starts
         
@@ -227,7 +228,8 @@ class DexDCA:
             return
         
         # Execute DCA order
-        current_order_num = self.cfg.num_orders - self.orders_left + 1
+        self.completed_orders += 1
+        current_order_num = self.completed_orders
         ok = self._execute_order(amount, px, current_order_num)
         
         if ok:
