@@ -66,10 +66,19 @@ class DexPureMarketMaking:
         self.upper_levels = up
         self.lower_levels = dn
 
+    def _quantize(self, symbol: str, amount: float) -> float:
+        qf = getattr(self.connectors[0], "quantize_amount", None)
+        if callable(qf):
+            try:
+                return float(qf(symbol, amount))
+            except Exception:
+                return float(amount)
+        return float(amount)
+
     def _execute(self, amount: float, amount_is_base: bool) -> bool:
         # Quantize to spend token decimals
         spend_symbol = self.cfg.base_symbol if amount_is_base else self.cfg.quote_symbol
-        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, amount)
         if amount_q <= 0:
             return False
         ok_all = True

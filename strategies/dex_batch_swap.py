@@ -87,10 +87,19 @@ class DexBatchSwap:
         else:
             return price <= level
 
+    def _quantize(self, symbol: str, amount: float) -> float:
+        qf = getattr(self.connectors[0], "quantize_amount", None)
+        if callable(qf):
+            try:
+                return float(qf(symbol, amount))
+            except Exception:
+                return float(amount)
+        return float(amount)
+
     def _execute_level(self, li: int, amount: float) -> None:
         # Quantize amount based on spend token decimals
         spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, amount)
         if amount_q <= 0:
             self.done[li] = True
             self.remaining[li] = 0.0

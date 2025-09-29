@@ -34,6 +34,15 @@ class DexSimpleSwap:
             chain_id=cfg.chain_id,
         )
 
+    def _quantize(self, symbol: str, amount: float) -> float:
+        qf = getattr(self.connector, "quantize_amount", None)
+        if callable(qf):
+            try:
+                return float(qf(symbol, amount))
+            except Exception:
+                return float(amount)
+        return float(amount)
+
     def run(self) -> str:
         base = self.cfg.base_symbol.upper()
         quote = self.cfg.quote_symbol.upper()
@@ -41,9 +50,9 @@ class DexSimpleSwap:
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        # Quantize to token decimals before checks and execution
+        # Quantize to token decimals before checks and execution (fallback if not supported)
         spend_symbol = base if self.cfg.amount_is_base else quote
-        amount_q = self.connector.quantize_amount(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, amount)
 
         # Check balances
         bal = self.connector.get_balance(spend_symbol)

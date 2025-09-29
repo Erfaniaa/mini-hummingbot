@@ -54,10 +54,19 @@ class DexDCA:
         chunk = min(chunk, self.remaining)
         return max(0.0, chunk)
 
+    def _quantize(self, symbol: str, amount: float) -> float:
+        qf = getattr(self.connectors[0], "quantize_amount", None)
+        if callable(qf):
+            try:
+                return float(qf(symbol, amount))
+            except Exception:
+                return float(amount)
+        return float(amount)
+
     def _execute(self, amount: float) -> bool:
         # Quantize by spend token decimals
         spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, amount)
         if amount_q <= 0:
             return False
         ok_all = True
@@ -85,7 +94,7 @@ class DexDCA:
             return
         # Quantize once for state updates and execution
         spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        amount_q = self._quantize(spend_symbol, amount)
         if amount_q <= 0.0:
             self.stop()
             return
