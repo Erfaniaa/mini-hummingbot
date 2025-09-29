@@ -155,7 +155,7 @@ class DexPureMarketMaking:
                     slippage_bps=self.cfg.slippage_bps,
                     side=("sell" if amount_is_base else "buy"),
                 )
-                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
             except Exception:
                 ok_all = False
         return ok_all
@@ -199,7 +199,7 @@ class DexPureMarketMaking:
                         ok = True
                         for c in self.connectors:
                             tx = c.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
-                            print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                            print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
                         fired = ok
                     except Exception:
                         pass
@@ -217,7 +217,7 @@ class DexPureMarketMaking:
                             ok = True
                             for c in self.connectors:
                                 tx = c.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
-                                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                                print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
                             fired = ok
                         except Exception:
                             pass

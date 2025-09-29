@@ -175,7 +175,7 @@ class DexBatchSwap:
                         tx = conn.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
                     else:
                         tx = conn.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount_user_basis, slippage_bps=self.cfg.slippage_bps)
-                    print("tx:", tx, "explorer:", conn.tx_explorer_url(tx))
+                    print(f"[dex_batch_swap] Transaction: {conn.tx_explorer_url(tx)}")
                 except Exception:
                     return
             self.done[li] = True
@@ -199,7 +199,7 @@ class DexBatchSwap:
                     slippage_bps=self.cfg.slippage_bps,
                     side=("sell" if spend_is_base else "buy"),
                 )
-                print("tx:", tx, "explorer:", conn.tx_explorer_url(tx))
+                print(f"[dex_batch_swap] Transaction: {conn.tx_explorer_url(tx)}")
             except Exception:
                 return
         self.done[li] = True

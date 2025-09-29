@@ -115,7 +115,7 @@ class DexDCA:
                     slippage_bps=self.cfg.slippage_bps,
                     side=("sell" if self.cfg.amount_is_base else "buy"),
                 )
-                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                print(f"[dex_dca] Transaction: {c.tx_explorer_url(tx)}")
             except Exception:
                 ok_all = False
         return ok_all
@@ -187,7 +187,7 @@ class DexDCA:
                         tx = c.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
                     else:
                         tx = c.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
-                    print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                    print(f"[dex_dca] Transaction: {c.tx_explorer_url(tx)}")
                 except Exception:
                     ok_all = False
             ok = ok_all
