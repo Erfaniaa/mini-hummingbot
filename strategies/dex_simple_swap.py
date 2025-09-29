@@ -8,6 +8,7 @@ from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.utils import compute_spend_amount, is_exact_output_case
 from strategies.order_manager import OrderManager, PreOrderCheck
 from strategies.periodic_reporter import PeriodicReporter
+from strategies.resilience import ConnectionMonitor
 
 
 @dataclass
@@ -51,6 +52,9 @@ class DexSimpleSwap:
             base_symbol=cfg.base_symbol,
             quote_symbol=cfg.quote_symbol
         )
+        
+        # Connection monitoring
+        self._connection_monitor = ConnectionMonitor(f"dex_simple_swap-{wallet_name}")
 
     def _prefix(self) -> str:
         return f"[{self.cfg.label}] " if self.cfg.label else ""
