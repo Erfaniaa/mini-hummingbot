@@ -311,6 +311,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
 
 def run_dex_batch_swap(ks: Keystore) -> None:
     print("\nDex Batch Swap - Ladder of one-sided simulated limit orders on PancakeSwap")
+    print("Hint: When selling base for quote, PancakeSwap may show the inverse of base/quote price.")
     defaults = _load_defaults("dex_batch_swap")
     # Network
     chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
@@ -469,6 +470,7 @@ def run_dex_batch_swap(ks: Keystore) -> None:
 
 def run_dex_pure_mm(ks: Keystore) -> None:
     print("\nDex Pure Market Making - Symmetric simulated limit orders around mid price")
+    print("Hint: When selling base for quote, PancakeSwap may show the inverse of base/quote price.")
     defaults = _load_defaults("dex_pure_market_making")
     # Network
     chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
@@ -618,6 +620,7 @@ def run_dex_pure_mm(ks: Keystore) -> None:
 
 def run_dex_dca(ks: Keystore) -> None:
     print("\nDex DCA - Periodically swap to complete total allocation over time")
+    print("Hint: When selling base for quote, PancakeSwap may show the inverse of base/quote price.")
     defaults = _load_defaults("dex_dca")
     # Network
     chain_str = prompt(f"Chain (56 mainnet / 97 testnet) [{defaults.get('chain_id','56')}]: ").strip() or str(defaults.get("chain_id", "56"))
