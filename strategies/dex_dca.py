@@ -167,6 +167,9 @@ class DexDCA:
 
     def _on_tick(self) -> None:
         """Tick handler with resilience and periodic reporting."""
+        if self._stopped:
+            return
+        
         # Periodic balance reporting
         for i, reporter in enumerate(self.reporters):
             try:

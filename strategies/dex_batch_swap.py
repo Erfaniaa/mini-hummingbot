@@ -150,9 +150,14 @@ class DexBatchSwap:
         return result
 
     def _should_execute(self, price: float, level: float) -> bool:
-        if self.cfg.amount_is_base:
+        """Check if price has reached the level to execute order."""
+        spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
+        
+        if spend_is_base:
+            # Selling base: execute when price reaches or exceeds level
             return price >= level
         else:
+            # Buying base: execute when price reaches or drops below level
             return price <= level
 
     def _quantize(self, symbol: str, amount: float) -> float:
@@ -237,6 +242,9 @@ class DexBatchSwap:
 
     def _on_tick(self) -> None:
         """Tick handler with resilience - continues even if individual operations fail."""
+        if self._stopped:
+            return
+        
         self._tick_counter += 1
         
         # Periodic balance reporting (every reporter checks its own interval)
@@ -271,9 +279,10 @@ class DexBatchSwap:
                     print(f"[dex_batch_swap] Error executing level {i}: {e}")
                     print(f"[dex_batch_swap] Strategy continues with remaining levels...")
 
-        remaining_levels = sum(1 for d in self.done if not d)
-        if self._tick_counter % 1 == 0:
-            print(f"[dex_batch_swap] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={price:.8f} levels_left={remaining_levels} {self._balances_summary()}")
+        # Periodic status logging (every 10 ticks to reduce spam)
+        if self._tick_counter % 10 == 0:
+            remaining_levels = sum(1 for d in self.done if not d)
+            print(f"[dex_batch_swap] Price: {price:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Levels remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
 
         if all(self.done):
             self.stop()

@@ -200,6 +200,14 @@ class OrderManager:
         order.actual_output = actual_output
         self._log_filled(order)
     
+    def mark_failed(self, order: OrderInfo, reason: str = ""):
+        """Mark order as failed."""
+        order.status = "failed"
+        order.complete_time = time.time()
+        order.error_message = reason
+        prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
+        print(f"{prefix} ✗ Order #{order.internal_id} FAILED: {reason}")
+    
     def _log_submission(self, order: OrderInfo, attempt: int):
         """Log order submission."""
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"

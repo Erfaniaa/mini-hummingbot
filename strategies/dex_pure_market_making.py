@@ -207,6 +207,9 @@ class DexPureMarketMaking:
 
     def _on_tick(self) -> None:
         """Tick handler with resilience and periodic reporting."""
+        if self._stopped:
+            return
+        
         import time
         
         # Periodic balance reporting
