@@ -53,9 +53,12 @@ class DexPureMarketMaking:
 
     def _price(self) -> float | None:
         try:
-            return self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            return self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
         except Exception:
-            return None
+            try:
+                return self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            except Exception:
+                return None
 
     def _rebuild_levels(self, mid: float) -> None:
         # Compute geometric steps by percentage around mid price

@@ -93,11 +93,14 @@ class DexDCA:
         if amount <= 0.0:
             self.stop()
             return
-        # Convert user basis chunk to spend token using current price
+        # Convert user basis chunk to spend token using current price (fast first)
         try:
-            px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            px = self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
         except Exception:
-            px = None
+            try:
+                px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            except Exception:
+                px = None
         if not px or px <= 0:
             return
         spend_amt = compute_spend_amount(px, amount, self.cfg.amount_is_base, self.cfg.amount_is_base)

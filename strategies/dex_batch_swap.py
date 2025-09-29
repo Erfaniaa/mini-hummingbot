@@ -78,9 +78,12 @@ class DexBatchSwap:
 
     def _current_price(self) -> Optional[float]:
         try:
-            return self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            return self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
         except Exception:
-            return None
+            try:
+                return self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            except Exception:
+                return None
 
     def _should_execute(self, price: float, level: float) -> bool:
         if self.cfg.amount_is_base:
