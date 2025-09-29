@@ -8,6 +8,9 @@ from typing import List, Optional
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
 from strategies.utils import compute_spend_amount, is_exact_output_case
+from strategies.order_manager import OrderManager
+from strategies.periodic_reporter import PeriodicReporter, AggregateReporter
+from strategies.resilience import ConnectionMonitor, resilient_call, RetryConfig
 
 
 @dataclass
@@ -40,6 +43,35 @@ class DexDCA:
         ]
         self.remaining = float(cfg.total_amount)
         self.orders_left = int(cfg.num_orders)
+        
+        # Initialize order managers and reporters per wallet
+        self.order_managers: List[OrderManager] = []
+        self.reporters: List[PeriodicReporter] = []
+        
+        for i, conn in enumerate(self.connectors):
+            wallet_name = f"wallet_{i+1}"
+            self.order_managers.append(OrderManager(wallet_name=wallet_name, strategy_name="dex_dca"))
+            self.reporters.append(PeriodicReporter(
+                wallet_name=wallet_name,
+                strategy_name="dex_dca",
+                base_symbol=cfg.base_symbol,
+                quote_symbol=cfg.quote_symbol,
+                report_interval=60.0
+            ))
+        
+        # Aggregate reporter
+        self.aggregate_reporter = AggregateReporter(
+            strategy_name="dex_dca",
+            base_symbol=cfg.base_symbol,
+            quote_symbol=cfg.quote_symbol
+        )
+        for reporter in self.reporters:
+            self.aggregate_reporter.add_reporter(reporter)
+        
+        # Connection monitoring
+        self._connection_monitor = ConnectionMonitor("dex_dca")
+        self._retry_config = RetryConfig(max_retries=5, initial_delay=2.0)
+        
         self._loop = StrategyLoop(StrategyLoopConfig(
             interval_seconds=cfg.interval_seconds,
             on_tick=self._on_tick,
@@ -89,24 +121,59 @@ class DexDCA:
         return ok_all
 
     def _on_tick(self) -> None:
+        """Tick handler with resilience and periodic reporting."""
+        # Periodic balance reporting
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i])
+            except Exception:
+                pass
+        
+        # Check connection health
+        if self._connection_monitor.should_warn():
+            print(f"[dex_dca] ⚠ Warning: {self._connection_monitor.consecutive_failures} consecutive connection failures")
+        
         if self.orders_left <= 0 or self.remaining <= 0.0:
             self.stop()
             return
+        
         amount = self._pick_chunk()
         if amount <= 0.0:
             self.stop()
             return
-        # Convert user basis chunk to spend token using current price (fast first)
-        method = None
-        try:
+        
+        # Get price with resilience
+        def get_fast_price():
             px = self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
-            method = "get_price_fast"
-        except Exception:
-            try:
-                px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
-                method = "get_price"
-            except Exception:
-                px = None
+            return px, "get_price_fast"
+        
+        def get_regular_price():
+            px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            return px, "get_price"
+        
+        result = resilient_call(
+            get_fast_price,
+            retry_config=self._retry_config,
+            on_retry=lambda attempt, error: print(f"[dex_dca] Price fetch attempt {attempt + 1} failed: {error}"),
+            fallback=None
+        )
+        
+        if result is None:
+            result = resilient_call(
+                get_regular_price,
+                retry_config=self._retry_config,
+                on_retry=lambda attempt, error: print(f"[dex_dca] Price fetch (fallback) attempt {attempt + 1} failed: {error}"),
+                fallback=None
+            )
+        
+        if result is None:
+            self._connection_monitor.record_failure(Exception("Failed to fetch price"))
+            print("[dex_dca] Network issue; waiting to reconnect...")
+            return
+        
+        px, method = result
+        self._connection_monitor.record_success()
+        
         if not px or px <= 0:
             return
         basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
@@ -140,12 +207,65 @@ class DexDCA:
             print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
 
     def _on_error(self, e: Exception) -> None:
-        print(f"[dex_dca] Error: {e}")
+        """Error handler - logs error but allows strategy to continue."""
+        print(f"[dex_dca] ⚠ Error in strategy loop: {e}")
+        print(f"[dex_dca] Strategy will continue running...")
+        self._connection_monitor.record_failure(e)
 
     def start(self) -> None:
+        """Start strategy with initial balance snapshots."""
+        print("[dex_dca] Starting strategy...")
+        
+        # Take initial snapshots
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i], force=True)
+            except Exception as e:
+                print(f"[dex_dca] Warning: Could not take initial snapshot for wallet {i+1}: {e}")
+        
+        print(f"[dex_dca] Monitoring {len(self.connectors)} wallet(s)")
+        print(f"[dex_dca] Total orders: {self.cfg.num_orders}")
+        print(f"[dex_dca] Total amount: {self.cfg.total_amount} ({self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol})")
+        print(f"[dex_dca] Interval: {self.cfg.interval_seconds}s")
+        print(f"[dex_dca] Strategy will continue running even if network errors occur\n")
+        
         self._loop.start()
 
     def stop(self) -> None:
+        """Stop strategy and print final reports."""
+        print("\n[dex_dca] Stopping strategy...")
+        
+        # Print final snapshots and P&L reports
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i], force=True)
+                reporter.print_final_report()
+            except Exception as e:
+                print(f"[dex_dca] Error generating report for wallet {i+1}: {e}")
+        
+        # Print aggregate report
+        try:
+            self.aggregate_reporter.print_aggregate_report()
+        except Exception as e:
+            print(f"[dex_dca] Error generating aggregate report: {e}")
+        
+        # Print order summary for each wallet
+        for i, order_manager in enumerate(self.order_managers):
+            summary = order_manager.get_summary()
+            print(f"\n[wallet_{i+1}] === Order Summary ===")
+            print(f"[wallet_{i+1}] Total Orders: {summary['total']}")
+            print(f"[wallet_{i+1}] Filled: {summary['filled']}")
+            print(f"[wallet_{i+1}] Failed: {summary['failed']}")
+            print(f"[wallet_{i+1}] Success Rate: {summary['success_rate']:.1f}%")
+        
+        # Print connection statistics
+        stats = self._connection_monitor.get_stats()
+        print(f"\n[dex_dca] === Connection Statistics ===")
+        print(f"[dex_dca] Total Attempts: {stats['total_attempts']}")
+        print(f"[dex_dca] Successful: {stats['successful']}")
+        print(f"[dex_dca] Failed: {stats['failed']}")
+        print(f"[dex_dca] Success Rate: {stats['success_rate']:.1f}%\n")
+        
         self._loop.stop()
 
 
