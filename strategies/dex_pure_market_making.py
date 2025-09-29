@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
 from strategies.utils import compute_spend_amount, is_exact_output_case
-from strategies.order_manager import OrderManager
+from strategies.order_manager import OrderManager, format_timestamp
 from strategies.periodic_reporter import PeriodicReporter, AggregateReporter
 from strategies.resilience import ConnectionMonitor, resilient_call, RetryConfig
 
@@ -50,6 +51,7 @@ class DexPureMarketMaking:
         self.lower_levels: List[float] = []
         self._last_refresh_ts: float = 0.0
         self._stopped: bool = False
+        self._start_time: Optional[float] = None  # Set when strategy starts
         
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
@@ -287,13 +289,14 @@ class DexPureMarketMaking:
                 dist_down = ((px - nearest_lower) / nearest_lower * 100)
                 status_parts.append(f"Next BUY: {nearest_lower:.8f} (-{dist_down:.2f}%)")
             
+            timestamp = format_timestamp(self._start_time)
             try:
                 total_base = sum(conn.get_balance(self.cfg.base_symbol) for conn in self.connectors)
                 total_quote = sum(conn.get_balance(self.cfg.quote_symbol) for conn in self.connectors)
                 portfolio_value = total_quote + (total_base * px)
-                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
+                print(f"{timestamp} [dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
             except Exception:
-                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)}")
+                print(f"{timestamp} [dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)}")
 
     def _on_error(self, e: Exception) -> None:
         """Error handler - logs error but allows strategy to continue."""
@@ -303,7 +306,12 @@ class DexPureMarketMaking:
 
     def start(self) -> None:
         """Start strategy with initial balance snapshots."""
+        self._start_time = time.time()
         print("[dex_pmm] Starting strategy...")
+        
+        # Update order managers with start time
+        for order_mgr in self.order_managers:
+            order_mgr.strategy_start_time = self._start_time
         
         # Take initial snapshots
         for i, reporter in enumerate(self.reporters):

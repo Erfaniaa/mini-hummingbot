@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
 from strategies.utils import compute_spend_amount, is_exact_output_case
-from strategies.order_manager import OrderManager
+from strategies.order_manager import OrderManager, format_timestamp
 from strategies.periodic_reporter import PeriodicReporter, AggregateReporter
 from strategies.resilience import ConnectionMonitor, resilient_call, RetryConfig
 
@@ -77,6 +77,7 @@ class DexBatchSwap:
         self.done: List[bool] = [False] * cfg.num_orders
         self._tick_counter: int = 0
         self._stopped: bool = False
+        self._start_time: Optional[float] = None  # Set when strategy starts
         
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
@@ -308,12 +309,13 @@ class DexBatchSwap:
                             next_level_num = i + 1
                             break
             
+            timestamp = format_timestamp(self._start_time)
             if next_level:
                 distance = ((price - next_level) / next_level * 100) if spend_is_base else ((next_level - price) / price * 100)
                 direction = "up" if spend_is_base else "down"
-                print(f"[dex_batch_swap] Current price: {price:.8f} | Next level #{next_level_num}: {next_level:.8f} ({abs(distance):.2f}% {direction}) | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
+                print(f"{timestamp} [dex_batch_swap] Current price: {price:.8f} | Next level #{next_level_num}: {next_level:.8f} ({abs(distance):.2f}% {direction}) | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
             else:
-                print(f"[dex_batch_swap] Current price: {price:.8f} | All pending levels triggered | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
+                print(f"{timestamp} [dex_batch_swap] Current price: {price:.8f} | All pending levels triggered | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
 
         if all(self.done):
             self.stop()
@@ -326,7 +328,12 @@ class DexBatchSwap:
 
     def start(self) -> None:
         """Start strategy with initial balance snapshots."""
+        self._start_time = time.time()
         print("[dex_batch_swap] Starting strategy...")
+        
+        # Update order managers with start time
+        for order_mgr in self.order_managers:
+            order_mgr.strategy_start_time = self._start_time
         
         # Take initial snapshots
         for i, reporter in enumerate(self.reporters):

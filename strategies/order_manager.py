@@ -6,9 +6,30 @@ Provides order validation, retry logic, and enhanced logging.
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Dict, Any
 from decimal import Decimal
+
+
+def format_timestamp(strategy_start_time: Optional[float] = None) -> str:
+    """
+    Format current timestamp with UTC time and elapsed time.
+    
+    Args:
+        strategy_start_time: Unix timestamp when strategy started (optional)
+    
+    Returns:
+        Formatted string like "[2025-09-29 12:34:56 UTC | +123s]" or "[2025-09-29 12:34:56 UTC]"
+    """
+    now = time.time()
+    utc_time = datetime.utcfromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    if strategy_start_time:
+        elapsed = int(now - strategy_start_time)
+        return f"[{utc_time} | +{elapsed}s]"
+    else:
+        return f"[{utc_time}]"
 
 
 @dataclass
@@ -47,10 +68,11 @@ class OrderManager:
     Manages order lifecycle with validation, retries, and logging.
     """
     
-    def __init__(self, wallet_name: str, strategy_name: str, max_retries: int = 3):
+    def __init__(self, wallet_name: str, strategy_name: str, max_retries: int = 3, strategy_start_time: Optional[float] = None):
         self.wallet_name = wallet_name
         self.strategy_name = strategy_name
         self.max_retries = max_retries
+        self.strategy_start_time = strategy_start_time
         self._order_counter = 0
         self.orders: Dict[int, OrderInfo] = {}
     
@@ -206,14 +228,16 @@ class OrderManager:
         order.complete_time = time.time()
         order.error_message = reason
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
-        print(f"{prefix} ✗ Order #{order.internal_id} FAILED: {reason}")
+        timestamp = format_timestamp(self.strategy_start_time)
+        print(f"{timestamp} {prefix} ✗ Order #{order.internal_id} FAILED: {reason}")
     
     def _log_submission(self, order: OrderInfo, attempt: int):
         """Log order submission."""
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         side_str = order.side.upper()
+        timestamp = format_timestamp(self.strategy_start_time)
         
-        print(f"{prefix} Submitting order #{order.internal_id} (attempt {attempt + 1}/{self.max_retries})")
+        print(f"{timestamp} {prefix} Submitting order #{order.internal_id} (attempt {attempt + 1}/{self.max_retries})")
         print(f"{prefix}   Side: {side_str} {order.base_symbol}/{order.quote_symbol}")
         print(f"{prefix}   Amount: {order.amount} {order.quote_symbol if order.side == 'buy' else order.base_symbol}")
         if order.price:
@@ -243,11 +267,12 @@ class OrderManager:
         """Log order fill."""
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         duration = order.complete_time - order.submit_time if order.complete_time and order.submit_time else 0
+        timestamp = format_timestamp(self.strategy_start_time)
         
-        print(f"{prefix} ✓ Order #{order.internal_id} FILLED")
+        print(f"{timestamp} {prefix} ✓ Order #{order.internal_id} FILLED")
         if order.actual_output:
             print(f"{prefix}   Received: {order.actual_output}")
-        print(f"{prefix}   Time: {duration:.1f}s")
+        print(f"{prefix}   Execution time: {duration:.1f}s")
     
     def get_summary(self) -> Dict[str, Any]:
         """Get order summary statistics."""
