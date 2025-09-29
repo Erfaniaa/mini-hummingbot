@@ -1,9 +1,13 @@
 Mini-Hummingbot (PancakeSwap CLI)
 
-Getting started
+Getting Started
 - Create a Python 3.10+ venv
 - Install deps: `pip install -r requirements.txt`
 - Run the CLI: `python -m cli.main`
+- Add wallets via encrypted keystore
+- Approve tokens for PancakeSwap (one-time setup)
+- Select and configure a strategy
+- Monitor live with detailed order tracking and P&L updates
 
 Features
 - Encrypted keystore (multiple wallets)
@@ -20,9 +24,12 @@ Strategies
 - dex_dca: interval-based allocation (uniform/random)
 
 Order Management
-- Pre-order validation (balance, gas, allowance checks)
+- Pre-order validation (balance, gas, allowance checks) before submission
 - Automatic retry mechanism (3 attempts with exponential backoff)
-- Order tracking with internal IDs and detailed status
+- Order tracking with internal IDs (e.g., `dex_batch_swap-wallet_1-1`)
+- Detailed order information: base/quote, side (buy/sell), price, reason
+- Per-order submission, fill, and failure notifications
+- Orders clearly show which price level or DCA interval triggered them
 - Comprehensive logging with wallet name, strategy, and timestamps
 
 Reporting & Monitoring
@@ -39,7 +46,38 @@ Network Resilience
 - Strategies continue running despite temporary network issues
 - Individual order failures don't stop other orders
 
-Notes
-- Shows BSC explorer link for all transactions
-- Robust error handling prevents strategy crashes
+User Experience
+- Consistent BASE/QUOTE price display (never inverted)
+- Clean transaction links (BSC explorer only, no raw hashes)
+- Strategy stops cleanly without orphan transactions
+- Clear validation messages if orders can't be placed
+- Reduced log spam with smart periodic updates
+- "Please wait" notifications after order submission
+- All monetary values clearly labeled with token symbol
+
+Example Output
+```
+[wallet_1] [dex_batch_swap] Order dex_batch_swap-wallet_1-1 (SELL BTCB/USDT) created
+[wallet_1] [dex_batch_swap]   Reason: Price level 1/11: 0.20000000
+[wallet_1] [dex_batch_swap] Submitting order #dex_batch_swap-wallet_1-1 (Attempt 1/3)
+[wallet_1] [dex_batch_swap]   Side: SELL BTCB/USDT
+[wallet_1] [dex_batch_swap]   Amount: 1.818182 USDT
+[wallet_1] [dex_batch_swap]   Price: 0.19630755 BTCB/USDT
+[wallet_1] [dex_batch_swap] ✓ Order filled successfully!
+[wallet_1] [dex_batch_swap]   Transaction: https://bscscan.com/tx/0x...
+
+[wallet_1] [dex_batch_swap] === Balance Update ===
+[wallet_1] [dex_batch_swap] BTCB: 143.616241 (-35.334038)
+[wallet_1] [dex_batch_swap] USDT: 17.27 (+7.27)
+[wallet_1] [dex_batch_swap] Current Price: 0.19641531 BTCB/USDT
+[wallet_1] [dex_batch_swap] Portfolio Value: 45.48 USDT
+[wallet_1] [dex_batch_swap] P&L: +0.35 USDT (+0.78%)
+```
+
+Technical Notes
+- Supports both exact-input and exact-output swaps
+- Automatic path finding between v2 and v3 routes
+- Multi-hop routing via WBNB/USDC for optimal prices
+- Atomic commits and clean git history
+- Comprehensive test coverage for critical paths
 - All reports include P&L in both absolute and percentage terms
