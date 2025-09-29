@@ -173,5 +173,6 @@ mini-hummingbot/credentials.py
 mini-hummingbot/mini-hummingbot/credentials.py
 
 # Keystore secrets (do not commit)
-keystore/
+keystore/*
+!keystore/.gitkeep
 **/keystore.json
