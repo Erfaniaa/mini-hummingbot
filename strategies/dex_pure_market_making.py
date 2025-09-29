@@ -139,27 +139,71 @@ class DexPureMarketMaking:
                 return float(amount)
         return float(amount)
 
-    def _execute(self, spend_amount: float, amount_is_base: bool) -> bool:
-        # Quantize to spend token decimals
-        spend_symbol = self.cfg.base_symbol if amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, spend_amount)
-        if amount_q <= 0:
+    def _execute_order_at_level(self, level: float, price: float, is_upper: bool) -> bool:
+        """Execute market making order using OrderManager."""
+        if self._stopped:
             return False
-        ok_all = True
-        for c in self.connectors:
-            try:
-                tx = c.market_swap(
-                    base_symbol=self.cfg.base_symbol,
-                    quote_symbol=self.cfg.quote_symbol,
-                    amount=amount_q,
-                    amount_is_base=amount_is_base,
-                    slippage_bps=self.cfg.slippage_bps,
-                    side=("sell" if amount_is_base else "buy"),
-                )
-                print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
-            except Exception:
-                ok_all = False
-        return ok_all
+        
+        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
+        spend_is_base = is_upper  # upper level = sell base, lower level = buy base
+        side = "sell" if spend_is_base else "buy"
+        
+        all_success = True
+        
+        # Execute order for each wallet
+        for wallet_idx, (conn, order_mgr) in enumerate(zip(self.connectors, self.order_managers)):
+            # Create order
+            order = order_mgr.create_order(
+                base_symbol=self.cfg.base_symbol,
+                quote_symbol=self.cfg.quote_symbol,
+                side=side,
+                amount=self.cfg.order_amount,
+                price=price,
+                reason=f"{'Upper' if is_upper else 'Lower'} level at {level:.8f}"
+            )
+            
+            # Determine spend amount for validation
+            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
+            if is_exact_output_case(basis_is_base, spend_is_base):
+                # Estimate spend for validation (with buffer)
+                spend_amt_estimate = compute_spend_amount(price, self.cfg.order_amount, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt_estimate * 1.1)
+            else:
+                spend_amt = compute_spend_amount(price, self.cfg.order_amount, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt)
+            
+            # Pre-order validation
+            check = order_mgr.validate_order(conn, spend_symbol, spend_amt_estimate)
+            if not check.passed:
+                order_mgr.mark_failed(order, check.reason)
+                print(f"[wallet_{wallet_idx+1}] [dex_pmm] Skipping level {level:.8f}: {check.reason}")
+                all_success = False
+                continue
+            
+            # Submit order with retry
+            def submit_swap():
+                if is_exact_output_case(basis_is_base, spend_is_base):
+                    if spend_is_base:
+                        return conn.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
+                    else:
+                        return conn.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
+                else:
+                    return conn.market_swap(
+                        base_symbol=self.cfg.base_symbol,
+                        quote_symbol=self.cfg.quote_symbol,
+                        amount=spend_amt_estimate,
+                        amount_is_base=spend_is_base,
+                        slippage_bps=self.cfg.slippage_bps,
+                        side=side,
+                    )
+            
+            success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
+            if success:
+                order_mgr.mark_filled(order)
+            else:
+                all_success = False
+        
+        return all_success
 
     def _on_tick(self) -> None:
         """Tick handler with resilience and periodic reporting."""
@@ -189,51 +233,37 @@ class DexPureMarketMaking:
             self._rebuild_levels(px)
             self._last_refresh_ts = now
 
-        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
-        # Decide side and execute when crosses levels
+        # Check price levels and execute orders
         fired = False
+        fired_level = None
+        
+        # Check upper levels (sell base)
         for lvl in sorted(self.upper_levels):
             if px >= lvl:
-                # upper: sell base
-                if is_exact_output_case(basis_is_base, True):
-                    try:
-                        ok = True
-                        for c in self.connectors:
-                            tx = c.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
-                            print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
-                        fired = ok
-                    except Exception:
-                        pass
-                else:
-                    spend_amount = compute_spend_amount(px, self.cfg.order_amount, basis_is_base, True)
-                    if self._execute(spend_amount, True):
-                        fired = True
+                if self._execute_order_at_level(lvl, px, is_upper=True):
+                    fired = True
+                    fired_level = f"upper {lvl:.8f}"
                 break
+        
+        # If no upper level triggered, check lower levels (buy base)
         if not fired:
             for lvl in sorted(self.lower_levels, reverse=True):
                 if px <= lvl:
-                    # lower: buy base
-                    if is_exact_output_case(basis_is_base, False):
-                        try:
-                            ok = True
-                            for c in self.connectors:
-                                tx = c.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
-                                print(f"[dex_pmm] Transaction: {c.tx_explorer_url(tx)}")
-                            fired = ok
-                        except Exception:
-                            pass
-                    else:
-                        spend_q = compute_spend_amount(px, self.cfg.order_amount, basis_is_base, False)
-                        if self._execute(spend_q, False):
-                            fired = True
+                    if self._execute_order_at_level(lvl, px, is_upper=False):
+                        fired = True
+                        fired_level = f"lower {lvl:.8f}"
                     break
-        if int(now) % 1 == 0:
+        
+        # Periodic status logging
+        if int(now) % 10 == 0:  # Every 10 seconds to reduce spam
             try:
                 b = self.connectors[0].get_balance(self.cfg.base_symbol)
                 q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired} balance[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+                status = f"Order fired at {fired_level}" if fired else "No orders"
+                print(f"[dex_pmm] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | {status} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
             except Exception:
-                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired}")
+                status = f"Order fired at {fired_level}" if fired else "No orders"
+                print(f"[dex_pmm] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | {status}")
 
     def _on_error(self, e: Exception) -> None:
         """Error handler - logs error but allows strategy to continue."""

@@ -99,27 +99,71 @@ class DexDCA:
                 return float(amount)
         return float(amount)
 
-    def _execute(self, spend_amount: float) -> bool:
-        # Quantize by spend token decimals
-        spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
-        amount_q = self._quantize(spend_symbol, spend_amount)
-        if amount_q <= 0:
+    def _execute_order(self, amount: float, price: float, order_num: int) -> bool:
+        """Execute DCA order using OrderManager for proper tracking."""
+        if self._stopped:
             return False
-        ok_all = True
-        for c in self.connectors:
-            try:
-                tx = c.market_swap(
-                    base_symbol=self.cfg.base_symbol,
-                    quote_symbol=self.cfg.quote_symbol,
-                    amount=amount_q,
-                    amount_is_base=self.cfg.amount_is_base,
-                    slippage_bps=self.cfg.slippage_bps,
-                    side=("sell" if self.cfg.amount_is_base else "buy"),
-                )
-                print(f"[dex_dca] Transaction: {c.tx_explorer_url(tx)}")
-            except Exception:
-                ok_all = False
-        return ok_all
+        
+        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
+        spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
+        side = "sell" if spend_is_base else "buy"
+        
+        all_success = True
+        
+        # Execute order for each wallet
+        for wallet_idx, (conn, order_mgr) in enumerate(zip(self.connectors, self.order_managers)):
+            # Create order
+            order = order_mgr.create_order(
+                base_symbol=self.cfg.base_symbol,
+                quote_symbol=self.cfg.quote_symbol,
+                side=side,
+                amount=amount,
+                price=price,
+                reason=f"DCA order {order_num}/{self.cfg.num_orders}"
+            )
+            
+            # Determine spend amount for validation
+            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
+            if is_exact_output_case(basis_is_base, spend_is_base):
+                # Estimate spend for validation (with buffer)
+                spend_amt_estimate = compute_spend_amount(price, amount, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt_estimate * 1.1)
+            else:
+                spend_amt = compute_spend_amount(price, amount, basis_is_base, spend_is_base)
+                spend_amt_estimate = self._quantize(spend_symbol, spend_amt)
+            
+            # Pre-order validation
+            check = order_mgr.validate_order(conn, spend_symbol, spend_amt_estimate)
+            if not check.passed:
+                order_mgr.mark_failed(order, check.reason)
+                print(f"[wallet_{wallet_idx+1}] [dex_dca] Skipping order {order_num}: {check.reason}")
+                all_success = False
+                continue
+            
+            # Submit order with retry
+            def submit_swap():
+                if is_exact_output_case(basis_is_base, spend_is_base):
+                    if spend_is_base:
+                        return conn.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
+                    else:
+                        return conn.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
+                else:
+                    return conn.market_swap(
+                        base_symbol=self.cfg.base_symbol,
+                        quote_symbol=self.cfg.quote_symbol,
+                        amount=spend_amt_estimate,
+                        amount_is_base=spend_is_base,
+                        slippage_bps=self.cfg.slippage_bps,
+                        side=side,
+                    )
+            
+            success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
+            if success:
+                order_mgr.mark_filled(order)
+            else:
+                all_success = False
+        
+        return all_success
 
     def _on_tick(self) -> None:
         """Tick handler with resilience and periodic reporting."""
@@ -177,35 +221,22 @@ class DexDCA:
         
         if not px or px <= 0:
             return
-        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
-        spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
-        # If user chunk is output side -> exact-output per chunk
-        if is_exact_output_case(basis_is_base, spend_is_base):
-            ok_all = True
-            for c in self.connectors:
-                try:
-                    if spend_is_base:
-                        tx = c.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
-                    else:
-                        tx = c.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=amount, slippage_bps=self.cfg.slippage_bps)
-                    print(f"[dex_dca] Transaction: {c.tx_explorer_url(tx)}")
-                except Exception:
-                    ok_all = False
-            ok = ok_all
-            spend_amt = amount  # for logging only (target output amount)
-        else:
-            spend_amt = compute_spend_amount(px, amount, basis_is_base, spend_is_base)
-            ok = self._execute(spend_amt)
-        ok = self._execute(spend_amt)
+        
+        # Execute DCA order
+        current_order_num = self.cfg.num_orders - self.orders_left + 1
+        ok = self._execute_order(amount, px, current_order_num)
+        
         if ok:
             self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
+        
+        # Log status
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} balance[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+            print(f"[dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
         except Exception:
-            print(f"[dex_dca] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} executed={ok} chunk={spend_amt:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
+            print(f"[dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left}")
 
     def _on_error(self, e: Exception) -> None:
         """Error handler - logs error but allows strategy to continue."""
