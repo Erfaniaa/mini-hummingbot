@@ -9,15 +9,21 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
 from web3.contract import Contract
+# Try multiple POA middleware variants for broad web3 compatibility
 try:
-    # web3<6 style
-    from web3.middleware import ExtraDataToPOAMiddleware as _POA_MW  # type: ignore
-except Exception:  # pragma: no cover - fallback for other versions
+    from web3.middleware import ExtraDataToPOAMiddleware  # type: ignore
+except Exception:  # pragma: no cover
+    ExtraDataToPOAMiddleware = None  # type: ignore
+try:
+    from web3.middleware.geth_poa import GethPOAMiddleware, geth_poa_middleware  # type: ignore
+except Exception:  # pragma: no cover
     try:
-        # web3>=6 style
-        from web3.middleware.geth_poa import GethPOAMiddleware as _POA_MW  # type: ignore
+        # Older location
+        from web3.middleware import geth_poa_middleware  # type: ignore
+        GethPOAMiddleware = None  # type: ignore
     except Exception:
-        _POA_MW = None  # type: ignore
+        GethPOAMiddleware = None  # type: ignore
+        geth_poa_middleware = None  # type: ignore
 from web3.exceptions import ContractLogicError
 
 from core.token_registry import TokenRegistry
@@ -146,10 +152,16 @@ class PancakeSwapClient:
 
     def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None) -> None:
         self.web3 = Web3(Web3.HTTPProvider(rpc_url))
+        # Inject POA middleware for BSC-like chains (handles 280-byte extraData)
         try:
-            if _POA_MW is not None:
-                self.web3.middleware_onion.inject(_POA_MW, layer=0)
+            if ExtraDataToPOAMiddleware is not None:
+                self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            elif geth_poa_middleware is not None:
+                self.web3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            elif GethPOAMiddleware is not None:
+                self.web3.middleware_onion.inject(GethPOAMiddleware, layer=0)
         except Exception:
+            # Best-effort; proceed even if injection path differs in this web3 version
             pass
         if not self.web3.is_connected():
             raise RuntimeError("Failed to connect to RPC provider")
