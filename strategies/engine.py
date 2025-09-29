@@ -46,7 +46,7 @@ class StrategyLoop:
 
     def stop(self) -> None:
         self._stop_flag.set()
-        if self._thread is not None:
+        if self._thread is not None and threading.current_thread() is not self._thread:
             self._thread.join(timeout=2.0)
 
 
