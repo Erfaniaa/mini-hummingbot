@@ -321,6 +321,17 @@ class PancakeSwapConnector(ExchangeConnector):
     def _resolve(self, symbol: str) -> str:
         return self.registry.get(symbol).address
 
+    def get_token_decimals(self, symbol: str) -> int:
+        token = self._resolve(symbol)
+        return int(self.client.get_decimals(token))
+
+    def quantize_amount(self, symbol: str, amount: float) -> float:
+        # Round down to token decimals to avoid overspending
+        getcontext().prec = 50
+        decimals = self.get_token_decimals(symbol)
+        q = (Decimal(str(amount)) * (Decimal(10) ** Decimal(decimals))).to_integral_value(rounding=ROUND_DOWN)
+        return float(q / (Decimal(10) ** Decimal(decimals)))
+
     def get_price(self, base_symbol: str, quote_symbol: str) -> float:
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
@@ -352,7 +363,8 @@ class PancakeSwapConnector(ExchangeConnector):
 
     def approve(self, symbol: str, amount: float) -> str:
         token = self._resolve(symbol)
-        amount_wei = self.client.to_wei(token, amount)
+        amount_q = self.quantize_amount(symbol, amount)
+        amount_wei = self.client.to_wei(token, amount_q)
         return self.client.approve(token, int(amount_wei))
 
     def approve_unlimited(self, symbol: str) -> str:
@@ -368,9 +380,11 @@ class PancakeSwapConnector(ExchangeConnector):
         base = self._resolve(base_symbol)
         quote = self._resolve(quote_symbol)
         # If amount_is_base: we spend base to get quote. Otherwise we spend quote to get base.
+        token_in_symbol = base_symbol if amount_is_base else quote_symbol
         token_in = base if amount_is_base else quote
         token_out = quote if amount_is_base else base
-        amount_in_wei = self.client.to_wei(token_in, amount)
+        amount_q = self.quantize_amount(token_in_symbol, amount)
+        amount_in_wei = self.client.to_wei(token_in, amount_q)
 
         # Ensure sufficient balance pre-check to avoid revert
         bal_wei = self.client.get_balance(token_in)

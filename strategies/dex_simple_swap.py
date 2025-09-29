@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+from decimal import Decimal
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 
@@ -40,18 +41,21 @@ class DexSimpleSwap:
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        # Check balances
+        # Quantize to token decimals before checks and execution
         spend_symbol = base if self.cfg.amount_is_base else quote
+        amount_q = self.connector.quantize_amount(spend_symbol, amount)
+
+        # Check balances
         bal = self.connector.get_balance(spend_symbol)
-        if bal < amount:
-            raise RuntimeError(f"Insufficient balance: {spend_symbol} balance {bal} < {amount}")
+        if bal < amount_q:
+            raise RuntimeError(f"Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
 
         # Approve and swap
         try:
             tx_hash = self.connector.market_swap(
                 base_symbol=base,
                 quote_symbol=quote,
-                amount=amount,
+                amount=amount_q,
                 amount_is_base=self.cfg.amount_is_base,
                 slippage_bps=self.cfg.slippage_bps,
             )

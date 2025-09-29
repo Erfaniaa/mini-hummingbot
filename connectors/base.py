@@ -40,4 +40,15 @@ class ExchangeConnector(ABC):
     def tx_explorer_url(self, tx_hash: str) -> str:
         """Return a block explorer URL for a transaction."""
 
+    @abstractmethod
+    def get_token_decimals(self, symbol: str) -> int:
+        """Return the on-chain decimals for the given token symbol."""
+
+    @abstractmethod
+    def quantize_amount(self, symbol: str, amount: float) -> float:
+        """
+        Return amount rounded down to the token's decimal precision.
+        Implementations should avoid rounding up to prevent overspending.
+        """
+
 

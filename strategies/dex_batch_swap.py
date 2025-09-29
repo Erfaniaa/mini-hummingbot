@@ -88,13 +88,20 @@ class DexBatchSwap:
             return price <= level
 
     def _execute_level(self, li: int, amount: float) -> None:
+        # Quantize amount based on spend token decimals
+        spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
+        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        if amount_q <= 0:
+            self.done[li] = True
+            self.remaining[li] = 0.0
+            return
         tx_hashes: List[str] = []
         for conn in self.connectors:
             try:
                 tx = conn.market_swap(
                     base_symbol=self.cfg.base_symbol,
                     quote_symbol=self.cfg.quote_symbol,
-                    amount=amount,
+                    amount=amount_q,
                     amount_is_base=self.cfg.amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )

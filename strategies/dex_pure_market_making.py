@@ -67,13 +67,18 @@ class DexPureMarketMaking:
         self.lower_levels = dn
 
     def _execute(self, amount: float, amount_is_base: bool) -> bool:
+        # Quantize to spend token decimals
+        spend_symbol = self.cfg.base_symbol if amount_is_base else self.cfg.quote_symbol
+        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        if amount_q <= 0:
+            return False
         ok_all = True
         for c in self.connectors:
             try:
                 tx = c.market_swap(
                     base_symbol=self.cfg.base_symbol,
                     quote_symbol=self.cfg.quote_symbol,
-                    amount=amount,
+                    amount=amount_q,
                     amount_is_base=amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )
@@ -94,18 +99,16 @@ class DexPureMarketMaking:
             self._last_refresh_ts = now
 
         # Decide side and execute when crosses levels
-        # If price above an upper level, sell base for quote (amount_is_base=True)
-        # If price below a lower level, buy base with quote (amount_is_base=False)
         fired = False
         for lvl in sorted(self.upper_levels):
             if px >= lvl:
-                if self._execute(self.cfg.order_amount, True if self.cfg.amount_is_base else True):
+                if self._execute(self.cfg.order_amount, True):
                     fired = True
                 break
         if not fired:
             for lvl in sorted(self.lower_levels, reverse=True):
                 if px <= lvl:
-                    if self._execute(self.cfg.order_amount, False if self.cfg.amount_is_base else False):
+                    if self._execute(self.cfg.order_amount, False):
                         fired = True
                     break
         if int(now) % 1 == 0:

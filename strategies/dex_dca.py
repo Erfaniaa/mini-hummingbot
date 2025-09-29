@@ -55,13 +55,18 @@ class DexDCA:
         return max(0.0, chunk)
 
     def _execute(self, amount: float) -> bool:
+        # Quantize by spend token decimals
+        spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
+        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        if amount_q <= 0:
+            return False
         ok_all = True
         for c in self.connectors:
             try:
                 tx = c.market_swap(
                     base_symbol=self.cfg.base_symbol,
                     quote_symbol=self.cfg.quote_symbol,
-                    amount=amount,
+                    amount=amount_q,
                     amount_is_base=self.cfg.amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
                 )
@@ -78,16 +83,22 @@ class DexDCA:
         if amount <= 0.0:
             self.stop()
             return
-        ok = self._execute(amount)
+        # Quantize once for state updates and execution
+        spend_symbol = self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol
+        amount_q = self.connectors[0].quantize_amount(spend_symbol, amount)
+        if amount_q <= 0.0:
+            self.stop()
+            return
+        ok = self._execute(amount_q)
         if ok:
-            self.remaining -= amount
+            self.remaining = max(0.0, self.remaining - amount_q)
             self.orders_left -= 1
         try:
             b = self.connectors[0].get_balance(self.cfg.base_symbol)
             q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-            print(f"[dex_dca] executed={ok} chunk={amount:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+            print(f"[dex_dca] executed={ok} chunk={amount_q:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
         except Exception:
-            print(f"[dex_dca] executed={ok} chunk={amount:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
+            print(f"[dex_dca] executed={ok} chunk={amount_q:.6f} remaining={self.remaining:.6f} orders_left={self.orders_left}")
 
     def _on_error(self, e: Exception) -> None:
         print(f"[dex_dca] Error: {e}")
