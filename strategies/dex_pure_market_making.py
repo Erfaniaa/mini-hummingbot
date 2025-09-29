@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
-from strategies.utils import compute_spend_amount
+from strategies.utils import compute_spend_amount, is_exact_output_case
 
 
 @dataclass
@@ -22,6 +22,7 @@ class DexPureMMConfig:
     order_amount: float
     amount_is_base: bool
     refresh_seconds: float
+    amount_basis_is_base: Optional[bool] = None
     slippage_bps: int = 50
     tick_interval_seconds: float = 1.0
 
@@ -51,12 +52,14 @@ class DexPureMarketMaking:
             on_error=self._on_error,
         ))
 
-    def _price(self) -> float | None:
+    def _price(self) -> Optional[tuple[float, str]]:
         try:
-            return self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
+            px = self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
+            return px, "get_price_fast"
         except Exception:
             try:
-                return self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+                px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+                return px, "get_price"
             except Exception:
                 return None
 
@@ -94,6 +97,7 @@ class DexPureMarketMaking:
                     amount=amount_q,
                     amount_is_base=amount_is_base,
                     slippage_bps=self.cfg.slippage_bps,
+                    side=("sell" if amount_is_base else "buy"),
                 )
                 print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
             except Exception:
@@ -103,45 +107,60 @@ class DexPureMarketMaking:
     def _on_tick(self) -> None:
         import time
         now = time.time()
-        px = self._price()
-        if px is None:
+        p = self._price()
+        if p is None:
             return
+        px, method = p
         # Refresh levels periodically
         if now - self._last_refresh_ts >= float(self.cfg.refresh_seconds) or not (self.upper_levels and self.lower_levels):
             self._rebuild_levels(px)
             self._last_refresh_ts = now
 
-        # Convert configured per-order amount (user basis) to spend token units using current price
-        spend_amount = compute_spend_amount(
-            price_quote_per_base=px,
-            amount=self.cfg.order_amount,
-            amount_basis_is_base=self.cfg.amount_is_base,
-            spend_is_base=True,  # upper executes sell base, lower executes buy base -> we set per side below
-        )
-
+        basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
         # Decide side and execute when crosses levels
         fired = False
         for lvl in sorted(self.upper_levels):
             if px >= lvl:
-                # upper side: sell base -> spend base
-                if self._execute(spend_amount, True):
-                    fired = True
+                # upper: sell base
+                if is_exact_output_case(basis_is_base, True):
+                    try:
+                        ok = True
+                        for c in self.connectors:
+                            tx = c.swap_exact_out(self.cfg.base_symbol, self.cfg.quote_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
+                            print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                        fired = ok
+                    except Exception:
+                        pass
+                else:
+                    spend_amount = compute_spend_amount(px, self.cfg.order_amount, basis_is_base, True)
+                    if self._execute(spend_amount, True):
+                        fired = True
                 break
         if not fired:
             for lvl in sorted(self.lower_levels, reverse=True):
                 if px <= lvl:
-                    # lower side: buy base -> spend quote; recompute spend for quote side
-                    spend_q = compute_spend_amount(px, self.cfg.order_amount, self.cfg.amount_is_base, False)
-                    if self._execute(spend_q, False):
-                        fired = True
+                    # lower: buy base
+                    if is_exact_output_case(basis_is_base, False):
+                        try:
+                            ok = True
+                            for c in self.connectors:
+                                tx = c.swap_exact_out(self.cfg.quote_symbol, self.cfg.base_symbol, target_out_amount=self.cfg.order_amount, slippage_bps=self.cfg.slippage_bps)
+                                print("tx:", tx, "explorer:", c.tx_explorer_url(tx))
+                            fired = ok
+                        except Exception:
+                            pass
+                    else:
+                        spend_q = compute_spend_amount(px, self.cfg.order_amount, basis_is_base, False)
+                        if self._execute(spend_q, False):
+                            fired = True
                     break
         if int(now) % 1 == 0:
             try:
                 b = self.connectors[0].get_balance(self.cfg.base_symbol)
                 q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                print(f"[dex_pure_mm] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} fired={fired} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
+                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired} bal[{self.cfg.base_symbol}={b:.6f},{self.cfg.quote_symbol}={q:.6f}]")
             except Exception:
-                print(f"[dex_pure_mm] price({self.cfg.quote_symbol}/{self.cfg.base_symbol})={px:.8f} fired={fired}")
+                print(f"[dex_pure_mm] fetched via {method}(base={self.cfg.base_symbol}, quote={self.cfg.quote_symbol}); price({self.cfg.base_symbol}/{self.cfg.quote_symbol})={px:.8f} fired={fired}")
 
     def _on_error(self, e: Exception) -> None:
         print(f"[dex_pure_mm] Error: {e}")

@@ -34,6 +34,15 @@ def compute_spend_amount(
         return amount
 
 
+def is_exact_output_case(amount_basis_is_base: bool, spend_is_base: bool) -> bool:
+    """Return True when user amount is the output token side, suggesting exact-output swap.
+
+    - If spending base (sell): user basis in quote => they specified output (quote target)
+    - If spending quote (buy): user basis in base  => they specified output (base target)
+    """
+    return (spend_is_base and not amount_basis_is_base) or ((not spend_is_base) and amount_basis_is_base)
+
+
 def compute_quote_value(price_quote_per_base: float, spend_amount: float, spend_is_base: bool) -> float:
     """Compute notional quote value for the swap based on spend.
 
