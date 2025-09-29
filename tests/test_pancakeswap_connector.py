@@ -55,27 +55,24 @@ class FakeClient:
         return self.swap_v3_exact_input_single(tokens[0], tokens[-1], fees[0], amount_in, slippage_bps)
 
 
-def test_connector_market_swap_with_approval(monkeypatch):
-    conn = PancakeSwapConnector(rpc_url="http://localhost", private_key="0x11" * 32, chain_id=56)
+def test_connector_market_swap_with_approval():
     fake = FakeClient()
     fake._decimals = {"0xBASE": 18, "0xQUOTE": 18}
     fake._balances = {"0xBASE": fake.to_wei("0xBASE", 10)}
     fake._allowances = {"0xBASE": 0}
 
-    # patch resolver and client
+    conn = PancakeSwapConnector(rpc_url="http://localhost", private_key="0x11" * 32, chain_id=56, client=fake)
     conn._resolve = lambda s: "0xBASE" if s == "BASE" else "0xQUOTE"
-    conn.client = fake
 
     tx = conn.market_swap("BASE", "QUOTE", amount=1.0, amount_is_base=True)
     assert tx.startswith("0xswap")
 
 
-def test_connector_get_price(monkeypatch):
-    conn = PancakeSwapConnector(rpc_url="http://localhost", private_key="0x11" * 32, chain_id=56)
+def test_connector_get_price():
     fake = FakeClient()
     fake._decimals = {"0xBASE": 18, "0xQUOTE": 18}
+    conn = PancakeSwapConnector(rpc_url="http://localhost", private_key="0x11" * 32, chain_id=56, client=fake)
     conn._resolve = lambda s: "0xBASE" if s == "BASE" else "0xQUOTE"
-    conn.client = fake
 
     p = conn.get_price("BASE", "QUOTE")
     assert p == 1.0

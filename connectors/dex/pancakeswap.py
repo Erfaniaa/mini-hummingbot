@@ -8,7 +8,15 @@ from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
 from web3.contract import Contract
-from web3.middleware import ExtraDataToPOAMiddleware
+try:
+    # web3<6 style
+    from web3.middleware import ExtraDataToPOAMiddleware as _POA_MW  # type: ignore
+except Exception:  # pragma: no cover - fallback for other versions
+    try:
+        # web3>=6 style
+        from web3.middleware.geth_poa import GethPOAMiddleware as _POA_MW  # type: ignore
+    except Exception:
+        _POA_MW = None  # type: ignore
 from web3.exceptions import ContractLogicError
 
 from core.token_registry import TokenRegistry
@@ -137,7 +145,8 @@ class PancakeSwapClient:
     def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None) -> None:
         self.web3 = Web3(Web3.HTTPProvider(rpc_url))
         try:
-            self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            if _POA_MW is not None:
+                self.web3.middleware_onion.inject(_POA_MW, layer=0)
         except Exception:
             pass
         if not self.web3.is_connected():
@@ -295,9 +304,10 @@ class PancakeSwapConnector(ExchangeConnector):
         chain_id: int = 56,
         network: str = "mainnet",
         default_fee_tier: int = 2500,
+        client: Optional[PancakeSwapClient] = None,
     ) -> None:
         self.registry = TokenRegistry("testnet" if chain_id == 97 else network)
-        self.client = PancakeSwapClient(rpc_url=rpc_url, private_key=private_key, chain_id=chain_id)
+        self.client = client or PancakeSwapClient(rpc_url=rpc_url, private_key=private_key, chain_id=chain_id)
         self.chain_id = chain_id
         self.default_fee_tier = default_fee_tier
 
