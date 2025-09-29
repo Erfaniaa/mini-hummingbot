@@ -37,7 +37,32 @@ def ensure_keystore() -> Keystore:
             raise SystemExit(1)
         ks.initialize(pw1)
         print("Keystore created.")
-    return ks
+        return ks
+    # If file exists, verify it loads; if not, offer to recreate
+    try:
+        ks.load()
+        return ks
+    except Exception:
+        print("Existing keystore appears empty or corrupted.")
+        ans = prompt("Recreate keystore now? This will overwrite the file. (yes/no): ").strip().lower()
+        if ans not in {"y", "yes"}:
+            print("Cannot proceed without a valid keystore.")
+            raise SystemExit(1)
+        pw1 = getpass.getpass("Create keystore passphrase: ")
+        pw2 = getpass.getpass("Confirm passphrase: ")
+        if not pw1 or pw1 != pw2:
+            print("Passphrases do not match. Aborting.")
+            raise SystemExit(1)
+        try:
+            os.makedirs(os.path.dirname(KEYSTORE_PATH), exist_ok=True)
+            # Remove invalid file before initialize
+            if os.path.exists(KEYSTORE_PATH):
+                os.remove(KEYSTORE_PATH)
+        except Exception:
+            pass
+        ks.initialize(pw1)
+        print("Keystore recreated.")
+        return ks
 
 
 def menu_wallets(ks: Keystore) -> None:
@@ -64,7 +89,7 @@ def menu_wallets(ks: Keystore) -> None:
             if not name:
                 print("Name is required.")
                 continue
-            priv = getpass.getpass("Paste private key (0x...): ").strip()
+            priv = getpass.getpass("Paste private key (with or without 0x): ").strip()
             if not priv:
                 print("Private key is required.")
                 continue
