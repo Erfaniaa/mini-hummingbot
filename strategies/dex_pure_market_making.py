@@ -235,6 +235,16 @@ class DexPureMarketMaking:
         if now - self._last_refresh_ts >= float(self.cfg.refresh_seconds) or not (self.upper_levels and self.lower_levels):
             self._rebuild_levels(px)
             self._last_refresh_ts = now
+            
+            # Show updated levels
+            print(f"\n[dex_pmm] === Price Levels Refreshed (Mid: {px:.8f}) ===")
+            print(f"[dex_pmm] Upper levels (SELL {self.cfg.base_symbol}):")
+            for i, lvl in enumerate(sorted(self.upper_levels), 1):
+                print(f"[dex_pmm]   #{i}: {lvl:.8f} (+{((lvl - px) / px * 100):.2f}%)")
+            print(f"[dex_pmm] Lower levels (BUY {self.cfg.base_symbol}):")
+            for i, lvl in enumerate(sorted(self.lower_levels, reverse=True), 1):
+                print(f"[dex_pmm]   #{i}: {lvl:.8f} ({((lvl - px) / px * 100):.2f}%)")
+            print()
 
         # Check price levels and execute orders
         fired = False
@@ -257,16 +267,32 @@ class DexPureMarketMaking:
                         fired_level = f"lower {lvl:.8f}"
                     break
         
-        # Periodic status logging
-        if int(now) % 10 == 0:  # Every 10 seconds to reduce spam
+        # Periodic status logging (every 10 seconds)
+        if int(now) % 10 == 0:
+            # Find nearest levels
+            nearest_upper = min([lvl for lvl in self.upper_levels if lvl > px], default=None)
+            nearest_lower = max([lvl for lvl in self.lower_levels if lvl < px], default=None)
+            
+            status_parts = []
+            if fired:
+                status_parts.append(f"✓ Order fired at {fired_level}")
+            else:
+                status_parts.append("Waiting")
+            
+            if nearest_upper:
+                dist_up = ((nearest_upper - px) / px * 100)
+                status_parts.append(f"Next SELL: {nearest_upper:.8f} (+{dist_up:.2f}%)")
+            
+            if nearest_lower:
+                dist_down = ((px - nearest_lower) / nearest_lower * 100)
+                status_parts.append(f"Next BUY: {nearest_lower:.8f} (-{dist_down:.2f}%)")
+            
             try:
                 b = self.connectors[0].get_balance(self.cfg.base_symbol)
                 q = self.connectors[0].get_balance(self.cfg.quote_symbol)
-                status = f"Order fired at {fired_level}" if fired else "No orders"
-                print(f"[dex_pmm] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | {status} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
+                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)} | Balance: {self.cfg.base_symbol}={b:.6f}, {self.cfg.quote_symbol}={q:.6f}")
             except Exception:
-                status = f"Order fired at {fired_level}" if fired else "No orders"
-                print(f"[dex_pmm] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | {status}")
+                print(f"[dex_pmm] Price: {px:.8f} | {' | '.join(status_parts)}")
 
     def _on_error(self, e: Exception) -> None:
         """Error handler - logs error but allows strategy to continue."""

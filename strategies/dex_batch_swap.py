@@ -282,7 +282,30 @@ class DexBatchSwap:
         # Periodic status logging (every 10 ticks to reduce spam)
         if self._tick_counter % 10 == 0:
             remaining_levels = sum(1 for d in self.done if not d)
-            print(f"[dex_batch_swap] Price: {price:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Levels remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
+            
+            # Find next level to execute
+            spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
+            next_level = None
+            next_level_num = None
+            for i, (lvl, done) in enumerate(zip(self.levels, self.done)):
+                if not done:
+                    if spend_is_base:
+                        if price < lvl:  # Need price to go up
+                            next_level = lvl
+                            next_level_num = i + 1
+                            break
+                    else:
+                        if price > lvl:  # Need price to go down
+                            next_level = lvl
+                            next_level_num = i + 1
+                            break
+            
+            if next_level:
+                distance = ((price - next_level) / next_level * 100) if spend_is_base else ((next_level - price) / price * 100)
+                direction = "up" if spend_is_base else "down"
+                print(f"[dex_batch_swap] Current price: {price:.8f} | Next level #{next_level_num}: {next_level:.8f} ({abs(distance):.2f}% {direction}) | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
+            else:
+                print(f"[dex_batch_swap] Current price: {price:.8f} | All pending levels triggered | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
 
         if all(self.done):
             self.stop()
@@ -305,9 +328,16 @@ class DexBatchSwap:
                 print(f"[dex_batch_swap] Warning: Could not take initial snapshot for wallet {i+1}: {e}")
         
         print(f"[dex_batch_swap] Monitoring {len(self.connectors)} wallet(s)")
-        print(f"[dex_batch_swap] Price levels: {len(self.levels)}")
         print(f"[dex_batch_swap] Total amount: {self.cfg.total_amount} ({self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol})")
-        print(f"[dex_batch_swap] Strategy will continue running even if network errors occur\n")
+        print(f"[dex_batch_swap] Strategy will continue running even if network errors occur")
+        
+        # Show price levels for user reference
+        spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
+        side_str = "SELL" if spend_is_base else "BUY"
+        print(f"\n[dex_batch_swap] === Price Levels ({side_str} {self.cfg.base_symbol}) ===")
+        for i, lvl in enumerate(self.levels, 1):
+            print(f"[dex_batch_swap]   Level {i:2d}: {lvl:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol}")
+        print(f"[dex_batch_swap] Orders will execute when price {'reaches or exceeds' if spend_is_base else 'drops to or below'} each level\n")
         
         self._loop.start()
 
