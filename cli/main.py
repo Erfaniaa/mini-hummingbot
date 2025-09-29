@@ -291,9 +291,9 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print("Cancelled.")
         return
     # Execute concurrently per wallet
-    def worker(pk: str) -> None:
+    def worker(pk: str, label: str) -> None:
         try:
-            print("[swap] starting for wallet...")
+            print(f"[{label}] starting swap...")
             cfg = DexSimpleSwapConfig(
                 rpc_url=rpc_url,
                 private_key=pk,
@@ -305,26 +305,19 @@ def run_dex_simple_swap(ks: Keystore) -> None:
                 spend_is_base=spend_is_base,
                 amount_basis_is_base=amount_basis_is_base,
                 slippage_bps=sl_bps,
+                label=label,
             )
             strat = DexSimpleSwap(cfg)
             tx_hash = strat.run()
-            url = ("https://bscscan.com/tx/" if chain_id == 56 else "https://testnet.bscscan.com/tx/") + tx_hash
-            print("Swap submitted:", tx_hash)
-            print("Explorer:", url)
+            print(f"[{label}] submitted: {tx_hash}")
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"[{label}] Error: {e}")
 
-    threads = [threading.Thread(target=worker, args=(pk,), daemon=True) for pk in private_keys]
+    threads = [threading.Thread(target=worker, args=(pk, wallets[i - 1].name), daemon=False) for pk, i in zip(private_keys, selected)]
     for t in threads:
         t.start()
-    # Wait with timeout and report if still running
-    deadline = time.time() + 60
     for t in threads:
-        remaining = max(0.0, deadline - time.time())
-        t.join(timeout=remaining)
-    for t in threads:
-        if t.is_alive():
-            print("[swap] still running; RPC may be slow. Check network or try again.")
+        t.join()
 
 
 def run_dex_batch_swap(ks: Keystore) -> None:

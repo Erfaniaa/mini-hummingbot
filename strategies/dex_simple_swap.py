@@ -5,7 +5,7 @@ from typing import Optional
 from decimal import Decimal
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
-from strategies.utils import compute_spend_amount
+from strategies.utils import compute_spend_amount, compute_quote_value
 
 
 @dataclass
@@ -21,6 +21,8 @@ class DexSimpleSwapConfig:
     # New optional fields to decouple direction from basis
     spend_is_base: Optional[bool] = None
     amount_basis_is_base: Optional[bool] = None
+    # Optional label for logging (e.g., wallet name)
+    label: Optional[str] = None
 
 
 class DexSimpleSwap:
@@ -37,6 +39,9 @@ class DexSimpleSwap:
             private_key=cfg.private_key,
             chain_id=cfg.chain_id,
         )
+
+    def _prefix(self) -> str:
+        return f"[{self.cfg.label}] " if self.cfg.label else ""
 
     def _quantize(self, symbol: str, amount: float) -> float:
         qf = getattr(self.connector, "quantize_amount", None)
@@ -61,15 +66,18 @@ class DexSimpleSwap:
         # Determine spend symbol
         spend_symbol = base if spend_is_base else quote
 
+        price = None
         # Convert user-entered basis to spend token amount
         if basis_is_base == spend_is_base:
             spend_amt = amount
         else:
             # Need price to convert between base and quote basis
             try:
+                print(f"{self._prefix()}[swap] fetching price for {base}/{quote}...")
                 price = self.connector.get_price(base, quote)  # quote per 1 base
+                print(f"{self._prefix()}[swap] price={price}")
             except Exception as e:
-                raise RuntimeError("Failed to fetch price for basis conversion") from e
+                raise RuntimeError(f"No route available for {base}/{quote} (price fetch failed)") from e
             if price <= 0:
                 raise RuntimeError("Failed to fetch price")
             spend_amt = compute_spend_amount(
@@ -79,13 +87,22 @@ class DexSimpleSwap:
                 spend_is_base=spend_is_base,
             )
 
+        # If price wasn't fetched but we need notional, fetch for display only
+        if price is None:
+            try:
+                price = self.connector.get_price(base, quote)
+            except Exception:
+                price = 0.0
+        notional_quote = compute_quote_value(price or 0.0, spend_amt, spend_is_base)
+        print(f"{self._prefix()}[swap] notional≈{notional_quote:.2f} {quote}")
+
         # Quantize to token decimals before checks and execution
         amount_q = self._quantize(spend_symbol, spend_amt)
 
         # Check balances
         bal = self.connector.get_balance(spend_symbol)
         if bal < amount_q:
-            raise RuntimeError(f"Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
+            raise RuntimeError(f"{self._prefix()}Insufficient balance: {spend_symbol} balance {bal} < {amount_q}")
 
         # Approve and swap (connector expects amount in spend token units)
         try:
@@ -96,10 +113,9 @@ class DexSimpleSwap:
                 amount_is_base=spend_is_base,
                 slippage_bps=self.cfg.slippage_bps,
             )
-            print("tx:", tx_hash)
-            print("explorer:", self.connector.tx_explorer_url(tx_hash))
+            print(f"{self._prefix()}submitted: {tx_hash}")
         except Exception as e:
-            raise RuntimeError(f"Swap failed: {e}")
+            raise RuntimeError(f"{self._prefix()}Swap failed: {e}")
         return tx_hash
 
 

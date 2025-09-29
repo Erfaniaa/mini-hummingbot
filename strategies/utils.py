@@ -32,3 +32,14 @@ def compute_spend_amount(
             # amount given in base, convert to quote
             return amount * float(price_quote_per_base)
         return amount
+
+
+def compute_quote_value(price_quote_per_base: float, spend_amount: float, spend_is_base: bool) -> float:
+    """Compute notional quote value for the swap based on spend.
+
+    - If spending base: value_in_quote = spend_amount * price
+    - If spending quote: value_in_quote = spend_amount
+    """
+    if price_quote_per_base <= 0:
+        return 0.0
+    return spend_amount * float(price_quote_per_base) if spend_is_base else spend_amount
