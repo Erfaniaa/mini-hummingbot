@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, List, Iterable, Generator
+from typing import Optional, Dict, List, Iterable
 from decimal import Decimal, getcontext, ROUND_DOWN
 
 from eth_account import Account
@@ -354,48 +354,28 @@ class PancakeSwapConnector(ExchangeConnector):
                 prefix.pop()
         yield from prod(tiers, edges)
 
-    def _candidate_intermediaries(self, exclude: List[str]) -> List[str]:
-        """Return list of intermediary token addresses to try, ordered by likelihood.
+    def _limited_paths(self, token_in: str, token_out: str) -> List[List[str]]:
+        """Return a limited set of likely paths for performance.
 
-        Exclude any addresses present in 'exclude'.
+        Includes up to 2-hop paths using WBNB and USDC only.
         """
-        cands: List[str] = []
-        # Always include WBNB
+        paths: List[List[str]] = []
         try:
             wbnb = self.client.DEFAULTS[self.chain_id]["WBNB"]
-            if wbnb not in exclude:
-                cands.append(wbnb)
         except Exception:
-            pass
-        # Try common route tokens by symbol via registry: USDC, USDT, BUSD, DAI, CAKE
-        for sym in ["USDC", "USDT", "BUSD", "DAI", "CAKE"]:
-            try:
-                addr = self._resolve(sym)
-                if addr not in exclude and addr not in cands:
-                    cands.append(addr)
-            except Exception:
-                continue
-        return cands
-
-    def _iter_paths(self, token_in: str, token_out: str, max_edges: int = 3) -> Generator[List[str], None, None]:
-        """Yield token paths [token_in, ..., token_out] up to max_edges.
-
-        edges = hops count, so max_edges=3 means up to 3 edges (2 intermediaries).
-        """
-        exclude = [token_in, token_out]
-        mids = self._candidate_intermediaries(exclude)
-        # 1-hop (direct) is handled elsewhere
-        # 2-node path (1 intermediate)
-        for m in mids:
-            yield [token_in, m, token_out]
-        if max_edges >= 3:
-            # 3-node path (2 intermediates)
-            for i in range(len(mids)):
-                for j in range(len(mids)):
-                    if j == i:
-                        continue
-                    m1, m2 = mids[i], mids[j]
-                    yield [token_in, m1, m2, token_out]
+            wbnb = None
+        try:
+            usdc = self._resolve("USDC")
+        except Exception:
+            usdc = None
+        if wbnb is not None and wbnb not in (token_in, token_out):
+            paths.append([token_in, wbnb, token_out])
+        if usdc is not None and usdc not in (token_in, token_out):
+            paths.append([token_in, usdc, token_out])
+        if wbnb is not None and usdc is not None and len({token_in, wbnb, usdc, token_out}) == 4:
+            paths.append([token_in, wbnb, usdc, token_out])
+            paths.append([token_in, usdc, wbnb, token_out])
+        return paths
 
     def _try_paths_quote(self, base: str, quote: str, one_base: int) -> Optional[float]:
         # Direct
@@ -406,8 +386,8 @@ class PancakeSwapConnector(ExchangeConnector):
                     return self.client.from_wei(quote, q.amount_out)
             except ContractLogicError:
                 continue
-        # Multi-hop paths via common intermediaries (WBNB/USDC/USDT/BUSD/DAI/CAKE)
-        for path_tokens in self._iter_paths(base, quote, max_edges=3):
+        # Multi-hop paths via limited intermediaries (WBNB/USDC)
+        for path_tokens in self._limited_paths(base, quote):
             edges = len(path_tokens) - 1
             for fees in self._fee_sets(edges):
                 try:
@@ -488,8 +468,8 @@ class PancakeSwapConnector(ExchangeConnector):
                     return self.client.swap_v3_exact_input_single(token_in, token_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
                 except ContractLogicError:
                     continue
-            # Multi-hop sequences using common intermediaries
-            for path_tokens in self._iter_paths(token_in, token_out, max_edges=3):
+            # Multi-hop sequences using limited intermediaries
+            for path_tokens in self._limited_paths(token_in, token_out):
                 edges = len(path_tokens) - 1
                 for fees in self._fee_sets(edges):
                     try:
@@ -503,7 +483,7 @@ class PancakeSwapConnector(ExchangeConnector):
                     return self.client.swap_v3_exact_input_single(rev_in, rev_out, fee, int(amount_in_wei), slippage_bps=slippage_bps)
                 except ContractLogicError:
                     continue
-            for path_tokens in self._iter_paths(rev_in, rev_out, max_edges=3):
+            for path_tokens in self._limited_paths(rev_in, rev_out):
                 edges = len(path_tokens) - 1
                 for fees in self._fee_sets(edges):
                     try:
