@@ -87,6 +87,33 @@ class PancakeSwapClient:
         },
     ]
 
+    # Minimal PancakeSwap V2 Router ABI subset
+    V2_ROUTER_ABI: List[Dict] = [
+        {
+            "inputs": [
+                {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                {"internalType": "uint256", "name": "amountOutMin", "type": "uint256"},
+                {"internalType": "address[]", "name": "path", "type": "address[]"},
+                {"internalType": "address", "name": "to", "type": "address"},
+                {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+            ],
+            "name": "swapExactTokensForTokens",
+            "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+            "stateMutability": "nonpayable",
+            "type": "function",
+        },
+        {
+            "inputs": [
+                {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
+                {"internalType": "address[]", "name": "path", "type": "address[]"},
+            ],
+            "name": "getAmountsOut",
+            "outputs": [{"internalType": "uint256[]", "name": "amounts", "type": "uint256[]"}],
+            "stateMutability": "view",
+            "type": "function",
+        },
+    ]
+
     SWAP_ROUTER_V3_ABI: List[Dict] = [
         {
             "inputs": [
@@ -140,6 +167,7 @@ class PancakeSwapClient:
             "V3_NFT_MANAGER": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364",
             "V3_QUOTER_V2": "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997",
             "V3_SWAP_ROUTER": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+            "V2_ROUTER": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
         },
         97: {
             "WBNB": "0xae13d989dac2f0debff460ac112a837c89baa7cd",
@@ -147,6 +175,7 @@ class PancakeSwapClient:
             "V3_NFT_MANAGER": "0x427bF5b37357632377eCbEC9de3626C71A5396c1",
             "V3_QUOTER_V2": "0xbC203d7f83677c7ed3F7acEc959963E7F4ECC5C2",
             "V3_SWAP_ROUTER": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+            "V2_ROUTER": "0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3",
         },
     }
 
@@ -173,6 +202,9 @@ class PancakeSwapClient:
         self._v3_swap_router_address: str = self.to_checksum(v3_swap_router_address or self.defaults[chain_id]["V3_SWAP_ROUTER"]) if "V3_SWAP_ROUTER" in self.defaults[chain_id] else None
         self._v3_quoter: Optional[Contract] = self.web3.eth.contract(address=self._v3_quoter_address, abi=self.QUOTER_V2_ABI) if self._v3_quoter_address else None
         self._v3_router: Optional[Contract] = self.web3.eth.contract(address=self._v3_swap_router_address, abi=self.SWAP_ROUTER_V3_ABI) if self._v3_swap_router_address else None
+        # v2 router
+        self._v2_router_address: str = self.to_checksum(self.defaults[chain_id].get("V2_ROUTER")) if self.defaults[chain_id].get("V2_ROUTER") else None
+        self._v2_router: Optional[Contract] = self.web3.eth.contract(address=self._v2_router_address, abi=self.V2_ROUTER_ABI) if self._v2_router_address else None
 
     def to_checksum(self, address: str) -> str:
         return self.web3.to_checksum_address(address)
@@ -263,6 +295,28 @@ class PancakeSwapClient:
             raise RuntimeError("SignedTransaction missing raw transaction bytes")
         tx_hash = self.web3.eth.send_raw_transaction(raw_tx)
         return self.web3.to_hex(tx_hash)
+
+    # ----------------------------
+    # v2 helpers
+    # ----------------------------
+    def v2_get_amounts_out(self, path_tokens: List[str], amount_in: int) -> List[int]:
+        if self._v2_router is None:
+            raise RuntimeError("V2 Router not configured for this chain/network")
+        path = [self.to_checksum(t) for t in path_tokens]
+        return list(self._v2_router.functions.getAmountsOut(int(amount_in), path).call())
+
+    def v2_swap_exact_tokens_for_tokens(self, path_tokens: List[str], amount_in: int, min_out: int, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
+        self._require_account()
+        if self._v2_router is None:
+            raise RuntimeError("V2 Router not configured for this chain/network")
+        path = [self.to_checksum(t) for t in path_tokens]
+        to_addr = self.to_checksum(self.address)
+        deadline = int(time.time()) + 600
+        tx = self._v2_router.functions.swapExactTokensForTokens(int(amount_in), int(min_out), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
+        if gas_limit is None:
+            gas_limit = int(self.web3.eth.estimate_gas(tx))
+        tx["gas"] = gas_limit
+        return self._sign_and_send(tx)
 
     def approve(self, token: str, amount: int, spender: Optional[str] = None, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
         self._require_account()
@@ -407,6 +461,15 @@ class PancakeSwapConnector(ExchangeConnector):
         px = self._try_paths_quote(base, quote, one_base)
         if px is not None:
             return px
+        # v2 fallback pricing via getAmountsOut across limited paths
+        for path_tokens in self._limited_paths(base, quote):
+            try:
+                amounts = self.client.v2_get_amounts_out(path_tokens, int(one_base))
+                out_amount = amounts[-1]
+                if out_amount > 0:
+                    return self.client.from_wei(quote, out_amount)
+            except Exception:
+                continue
         raise RuntimeError(f"No route available for {base_symbol}/{quote_symbol}")
 
     def get_balance(self, symbol: str) -> float:
@@ -459,7 +522,7 @@ class PancakeSwapConnector(ExchangeConnector):
         if int(allowance) < int(amount_in_wei):
             self.client.approve(token_in, int(amount_in_wei))
 
-        # Try direct path first; then multi-hop via WBNB/USDC; finally reverse
+        # Try direct path first; then multi-hop via WBNB/USDC; then v2; finally reverse
         fee_candidates = [self.default_fee_tier, 500, 2500, 10000]
         try:
             # Direct pools
@@ -476,6 +539,24 @@ class PancakeSwapConnector(ExchangeConnector):
                         return self.client.swap_v3_exact_input_path(path_tokens, list(fees), int(amount_in_wei), slippage_bps=slippage_bps)
                     except ContractLogicError:
                         continue
+            # V2 fallback swaps
+            # Ensure allowance to v2 router
+            try:
+                v2_router = self.client._v2_router_address
+                if v2_router:
+                    current_allowance = self.client.get_allowance(token_in, spender=v2_router)
+                    if int(current_allowance) < int(amount_in_wei):
+                        self.client.approve(token_in, int(amount_in_wei), spender=v2_router)
+                    for path_tokens in self._limited_paths(token_in, token_out):
+                        try:
+                            amounts = self.client.v2_get_amounts_out(path_tokens, int(amount_in_wei))
+                            min_out = int(amounts[-1]) * (10_000 - int(slippage_bps)) // 10_000
+                            if min_out > 0:
+                                return self.client.v2_swap_exact_tokens_for_tokens(path_tokens, int(amount_in_wei), int(min_out))
+                        except Exception:
+                            continue
+            except Exception:
+                pass
             # Reverse fallback
             rev_in, rev_out = token_out, token_in
             for fee in fee_candidates:
