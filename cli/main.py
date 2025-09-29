@@ -147,7 +147,7 @@ def menu_token_approvals(ks: Keystore) -> None:
     except Exception as e:
         print(f"Error unlocking wallet: {e}")
         return
-    symbol = prompt("Token symbol to approve (e.g., USDT or BTCB): ").strip().upper()
+    symbol = prompt("Token symbol to approve (BTCB or USDT): ").strip().upper()
     if not symbol:
         print("Symbol required.")
         return
@@ -242,8 +242,8 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
-    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
+    base = prompt(f"Base symbol (BTCB) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (USDT) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
@@ -351,8 +351,8 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
-    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
+    base = prompt(f"Base symbol (BTCB) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (USDT) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
@@ -510,8 +510,8 @@ def run_dex_pure_mm(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
-    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
+    base = prompt(f"Base symbol (BTCB) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (USDT) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
@@ -660,8 +660,8 @@ def run_dex_dca(ks: Keystore) -> None:
         print(f"Error unlocking wallet(s): {e}")
         return
     # Symbols
-    base = prompt(f"Base symbol (e.g., USDT) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
-    quote = prompt(f"Quote symbol (e.g., BTCB) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
+    base = prompt(f"Base symbol (BTCB) [{defaults.get('base','')}]: ").strip().upper() or defaults.get("base", "").upper()
+    quote = prompt(f"Quote symbol (USDT) [{defaults.get('quote','')}]: ").strip().upper() or defaults.get("quote", "").upper()
     if not base or not quote:
         print("Base and Quote are required.")
         return
