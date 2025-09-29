@@ -8,6 +8,9 @@ from typing import List, Optional, Tuple
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.engine import StrategyLoop, StrategyLoopConfig
 from strategies.utils import compute_spend_amount, is_exact_output_case
+from strategies.order_manager import OrderManager
+from strategies.periodic_reporter import PeriodicReporter, AggregateReporter
+from strategies.resilience import ConnectionMonitor, resilient_call, RetryConfig
 
 
 @dataclass
@@ -73,6 +76,35 @@ class DexBatchSwap:
         self.remaining: List[float] = [cfg.total_amount * w for w in self.weights]
         self.done: List[bool] = [False] * cfg.num_orders
         self._tick_counter: int = 0
+        
+        # Initialize order managers and reporters per wallet
+        self.order_managers: List[OrderManager] = []
+        self.reporters: List[PeriodicReporter] = []
+        
+        for i, conn in enumerate(self.connectors):
+            wallet_name = f"wallet_{i+1}"
+            self.order_managers.append(OrderManager(wallet_name=wallet_name, strategy_name="dex_batch_swap"))
+            self.reporters.append(PeriodicReporter(
+                wallet_name=wallet_name,
+                strategy_name="dex_batch_swap",
+                base_symbol=cfg.base_symbol,
+                quote_symbol=cfg.quote_symbol,
+                report_interval=60.0  # 1 minute
+            ))
+        
+        # Aggregate reporter
+        self.aggregate_reporter = AggregateReporter(
+            strategy_name="dex_batch_swap",
+            base_symbol=cfg.base_symbol,
+            quote_symbol=cfg.quote_symbol
+        )
+        for reporter in self.reporters:
+            self.aggregate_reporter.add_reporter(reporter)
+        
+        # Connection monitoring
+        self._connection_monitor = ConnectionMonitor("dex_batch_swap")
+        self._retry_config = RetryConfig(max_retries=5, initial_delay=2.0)
+        
         self._loop = StrategyLoop(StrategyLoopConfig(
             interval_seconds=cfg.interval_seconds,
             on_tick=self._on_tick,
@@ -80,15 +112,41 @@ class DexBatchSwap:
         ))
 
     def _current_price(self) -> Optional[Tuple[float, str]]:
-        try:
+        """Get current price with resilience to network failures."""
+        def get_fast_price():
             px = self.connectors[0].get_price_fast(self.cfg.base_symbol, self.cfg.quote_symbol)
             return px, "get_price_fast"
-        except Exception:
-            try:
-                px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
-                return px, "get_price"
-            except Exception:
-                return None
+        
+        def get_regular_price():
+            px = self.connectors[0].get_price(self.cfg.base_symbol, self.cfg.quote_symbol)
+            return px, "get_price"
+        
+        # Try fast price first
+        result = resilient_call(
+            get_fast_price,
+            retry_config=self._retry_config,
+            on_retry=lambda attempt, error: print(f"[dex_batch_swap] Price fetch attempt {attempt + 1} failed: {error}"),
+            fallback=None
+        )
+        
+        if result is not None:
+            self._connection_monitor.record_success()
+            return result
+        
+        # Fallback to regular price
+        result = resilient_call(
+            get_regular_price,
+            retry_config=self._retry_config,
+            on_retry=lambda attempt, error: print(f"[dex_batch_swap] Price fetch (fallback) attempt {attempt + 1} failed: {error}"),
+            fallback=None
+        )
+        
+        if result is not None:
+            self._connection_monitor.record_success()
+        else:
+            self._connection_monitor.record_failure(Exception("Failed to fetch price"))
+        
+        return result
 
     def _should_execute(self, price: float, level: float) -> bool:
         if self.cfg.amount_is_base:
@@ -156,18 +214,40 @@ class DexBatchSwap:
             return "bal[unavailable]"
 
     def _on_tick(self) -> None:
+        """Tick handler with resilience - continues even if individual operations fail."""
         self._tick_counter += 1
+        
+        # Periodic balance reporting (every reporter checks its own interval)
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i])
+            except Exception as e:
+                # Don't stop strategy if snapshot fails
+                pass
+        
+        # Check connection health
+        if self._connection_monitor.should_warn():
+            print(f"[dex_batch_swap] ⚠ Warning: {self._connection_monitor.consecutive_failures} consecutive connection failures")
+        
         price_info = self._current_price()
         if price_info is None:
             if self._tick_counter % 5 == 0:
                 print("[dex_batch_swap] Network issue; waiting to reconnect...")
             return
+        
         price, method = price_info
+        
+        # Try to execute each level independently - failure of one doesn't stop others
         for i, (lvl, amt, done) in enumerate(zip(self.levels, self.remaining, self.done)):
             if done or amt <= 0:
                 continue
             if self._should_execute(price, lvl):
-                self._execute_level(i, amt, price)
+                try:
+                    self._execute_level(i, amt, price)
+                except Exception as e:
+                    # Log error but continue with other levels
+                    print(f"[dex_batch_swap] Error executing level {i}: {e}")
+                    print(f"[dex_batch_swap] Strategy continues with remaining levels...")
 
         remaining_levels = sum(1 for d in self.done if not d)
         if self._tick_counter % 1 == 0:
@@ -177,12 +257,64 @@ class DexBatchSwap:
             self.stop()
 
     def _on_error(self, e: Exception) -> None:
-        print(f"[dex_batch_swap] Error: {e}")
+        """Error handler - logs error but allows strategy to continue."""
+        print(f"[dex_batch_swap] ⚠ Error in strategy loop: {e}")
+        print(f"[dex_batch_swap] Strategy will continue running...")
+        self._connection_monitor.record_failure(e)
 
     def start(self) -> None:
+        """Start strategy with initial balance snapshots."""
+        print("[dex_batch_swap] Starting strategy...")
+        
+        # Take initial snapshots
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i], force=True)
+            except Exception as e:
+                print(f"[dex_batch_swap] Warning: Could not take initial snapshot for wallet {i+1}: {e}")
+        
+        print(f"[dex_batch_swap] Monitoring {len(self.connectors)} wallet(s)")
+        print(f"[dex_batch_swap] Price levels: {len(self.levels)}")
+        print(f"[dex_batch_swap] Total amount: {self.cfg.total_amount} ({self.cfg.base_symbol if self.cfg.amount_is_base else self.cfg.quote_symbol})")
+        print(f"[dex_batch_swap] Strategy will continue running even if network errors occur\n")
+        
         self._loop.start()
 
     def stop(self) -> None:
+        """Stop strategy and print final reports."""
+        print("\n[dex_batch_swap] Stopping strategy...")
+        
+        # Print final snapshots and P&L reports
+        for i, reporter in enumerate(self.reporters):
+            try:
+                reporter.take_snapshot(self.connectors[i], force=True)
+                reporter.print_final_report()
+            except Exception as e:
+                print(f"[dex_batch_swap] Error generating report for wallet {i+1}: {e}")
+        
+        # Print aggregate report
+        try:
+            self.aggregate_reporter.print_aggregate_report()
+        except Exception as e:
+            print(f"[dex_batch_swap] Error generating aggregate report: {e}")
+        
+        # Print order summary for each wallet
+        for i, order_manager in enumerate(self.order_managers):
+            summary = order_manager.get_summary()
+            print(f"\n[wallet_{i+1}] === Order Summary ===")
+            print(f"[wallet_{i+1}] Total Orders: {summary['total']}")
+            print(f"[wallet_{i+1}] Filled: {summary['filled']}")
+            print(f"[wallet_{i+1}] Failed: {summary['failed']}")
+            print(f"[wallet_{i+1}] Success Rate: {summary['success_rate']:.1f}%")
+        
+        # Print connection statistics
+        stats = self._connection_monitor.get_stats()
+        print(f"\n[dex_batch_swap] === Connection Statistics ===")
+        print(f"[dex_batch_swap] Total Attempts: {stats['total_attempts']}")
+        print(f"[dex_batch_swap] Successful: {stats['successful']}")
+        print(f"[dex_batch_swap] Failed: {stats['failed']}")
+        print(f"[dex_batch_swap] Success Rate: {stats['success_rate']:.1f}%\n")
+        
         self._loop.stop()
 
 
