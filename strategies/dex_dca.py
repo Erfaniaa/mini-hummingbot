@@ -43,6 +43,7 @@ class DexDCA:
         ]
         self.remaining = float(cfg.total_amount)
         self.orders_left = int(cfg.num_orders)
+        self._stopped: bool = False
         
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
@@ -233,6 +234,12 @@ class DexDCA:
 
     def stop(self) -> None:
         """Stop strategy and print final reports."""
+        if self._stopped:
+            return
+        
+        self._stopped = True
+        self._loop.stop()
+        
         print("\n[dex_dca] Stopping strategy...")
         
         # Print final snapshots and P&L reports
@@ -265,7 +272,5 @@ class DexDCA:
         print(f"[dex_dca] Successful: {stats['successful']}")
         print(f"[dex_dca] Failed: {stats['failed']}")
         print(f"[dex_dca] Success Rate: {stats['success_rate']:.1f}%\n")
-        
-        self._loop.stop()
 
 

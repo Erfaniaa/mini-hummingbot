@@ -49,6 +49,7 @@ class DexPureMarketMaking:
         self.upper_levels: List[float] = []
         self.lower_levels: List[float] = []
         self._last_refresh_ts: float = 0.0
+        self._stopped: bool = False
         
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
@@ -261,6 +262,12 @@ class DexPureMarketMaking:
 
     def stop(self) -> None:
         """Stop strategy and print final reports."""
+        if self._stopped:
+            return
+        
+        self._stopped = True
+        self._loop.stop()
+        
         print("\n[dex_pmm] Stopping strategy...")
         
         # Print final snapshots and P&L reports
@@ -293,7 +300,5 @@ class DexPureMarketMaking:
         print(f"[dex_pmm] Successful: {stats['successful']}")
         print(f"[dex_pmm] Failed: {stats['failed']}")
         print(f"[dex_pmm] Success Rate: {stats['success_rate']:.1f}%\n")
-        
-        self._loop.stop()
 
 
