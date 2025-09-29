@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from connectors.dex.pancakeswap import PancakeSwapConnector
 from strategies.utils import compute_spend_amount, is_exact_output_case
+from strategies.order_manager import OrderManager, PreOrderCheck
+from strategies.periodic_reporter import PeriodicReporter
 
 
 @dataclass
@@ -39,6 +41,16 @@ class DexSimpleSwap:
             private_key=cfg.private_key,
             chain_id=cfg.chain_id,
         )
+        
+        # Initialize order manager and reporter
+        wallet_name = cfg.label or "default"
+        self.order_manager = OrderManager(wallet_name=wallet_name, strategy_name="dex_simple_swap")
+        self.reporter = PeriodicReporter(
+            wallet_name=wallet_name,
+            strategy_name="dex_simple_swap",
+            base_symbol=cfg.base_symbol,
+            quote_symbol=cfg.quote_symbol
+        )
 
     def _prefix(self) -> str:
         return f"[{self.cfg.label}] " if self.cfg.label else ""
@@ -51,8 +63,30 @@ class DexSimpleSwap:
             except Exception:
                 return float(amount)
         return float(amount)
+    
+    def _finalize(self, tx_hash: str) -> str:
+        """Finalize swap: take final snapshot and print reports."""
+        # Take final snapshot
+        self.reporter.take_snapshot(self.connector, force=True)
+        
+        # Print final reports
+        self.reporter.print_final_report()
+        
+        # Print order summary
+        summary = self.order_manager.get_summary()
+        prefix = f"[{self.cfg.label}]" if self.cfg.label else ""
+        print(f"\n{prefix} === Order Summary ===")
+        print(f"{prefix} Total Orders: {summary['total']}")
+        print(f"{prefix} Filled: {summary['filled']}")
+        print(f"{prefix} Failed: {summary['failed']}")
+        print(f"{prefix} Success Rate: {summary['success_rate']:.1f}%\n")
+        
+        return tx_hash
 
     def run(self) -> str:
+        # Take initial snapshot
+        self.reporter.take_snapshot(self.connector, force=True)
+        
         base = self.cfg.base_symbol.upper()
         quote = self.cfg.quote_symbol.upper()
         amount = float(self.cfg.amount)
@@ -96,8 +130,8 @@ class DexSimpleSwap:
                     slippage_bps=int(self.cfg.slippage_bps),
                 )
                 url = self.connector.tx_explorer_url(tx_hash)
-                print(f"{self._prefix()}submitted: {url}")
-                return tx_hash
+                print(f"{self._prefix()}Transaction: {url}")
+                return self._finalize(tx_hash)
             except Exception as e:
                 print(f"{self._prefix()}[swap] exact-out failed ({e}); falling back to market swap with computed spend amount...")
                 # Fallback to market swap by computing spend amount
@@ -139,8 +173,8 @@ class DexSimpleSwap:
                         side=side,
                     )
                     url = self.connector.tx_explorer_url(tx_hash)
-                    print(f"{self._prefix()}submitted: {url}")
-                    return tx_hash
+                    print(f"{self._prefix()}Transaction: {url}")
+                    return self._finalize(tx_hash)
                 except Exception as e2:
                     raise RuntimeError(f"{self._prefix()}Swap failed after fallback: {e2}")
         # Otherwise, compute spend amount using side-aware price (approx-output with slippage guard)
@@ -193,9 +227,9 @@ class DexSimpleSwap:
                 side=side,
             )
             url = self.connector.tx_explorer_url(tx_hash)
-            print(f"{self._prefix()}submitted: {url}")
+            print(f"{self._prefix()}Transaction: {url}")
         except Exception as e:
             raise RuntimeError(f"{self._prefix()}Swap failed: {e}")
-        return tx_hash
+        return self._finalize(tx_hash)
 
 
