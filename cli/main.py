@@ -4,6 +4,7 @@ import getpass
 import os
 from typing import Optional
 import threading
+import time
 
 from core.keystore import Keystore
 from core.token_registry import TokenRegistry
@@ -292,6 +293,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     # Execute concurrently per wallet
     def worker(pk: str) -> None:
         try:
+            print("[swap] starting for wallet...")
             cfg = DexSimpleSwapConfig(
                 rpc_url=rpc_url,
                 private_key=pk,
@@ -315,8 +317,14 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     threads = [threading.Thread(target=worker, args=(pk,), daemon=True) for pk in private_keys]
     for t in threads:
         t.start()
+    # Wait with timeout and report if still running
+    deadline = time.time() + 60
     for t in threads:
-        t.join()
+        remaining = max(0.0, deadline - time.time())
+        t.join(timeout=remaining)
+    for t in threads:
+        if t.is_alive():
+            print("[swap] still running; RPC may be slow. Check network or try again.")
 
 
 def run_dex_batch_swap(ks: Keystore) -> None:

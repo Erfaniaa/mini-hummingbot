@@ -151,7 +151,8 @@ class PancakeSwapClient:
     }
 
     def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None) -> None:
-        self.web3 = Web3(Web3.HTTPProvider(rpc_url))
+        # Add request timeout to avoid indefinite hangs on slow/unresponsive RPCs
+        self.web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
         # Inject POA middleware for BSC-like chains (handles 280-byte extraData)
         try:
             if ExtraDataToPOAMiddleware is not None:
