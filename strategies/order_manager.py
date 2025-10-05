@@ -44,6 +44,7 @@ class OrderInfo:
     amount: float
     price: Optional[float]
     reason: str  # why this order was placed
+    spend_symbol: Optional[str] = None  # symbol being spent (for display)
     tx_hash: Optional[str] = None
     bscscan_url: Optional[str] = None
     status: str = "pending"  # pending, submitted, filled, failed, cancelled
@@ -239,7 +240,9 @@ class OrderManager:
         
         print(f"{timestamp} {prefix} Submitting order #{order.internal_id} (attempt {attempt + 1}/{self.max_retries})")
         print(f"{prefix}   Side: {side_str} {order.base_symbol}/{order.quote_symbol}")
-        print(f"{prefix}   Amount: {order.amount} {order.quote_symbol if order.side == 'buy' else order.base_symbol}")
+        # Use spend_symbol if available, otherwise fall back to old logic
+        amount_symbol = order.spend_symbol if order.spend_symbol else (order.quote_symbol if order.side == 'buy' else order.base_symbol)
+        print(f"{prefix}   Amount: {order.amount} {amount_symbol}")
         if order.price:
             print(f"{prefix}   Price: {order.price:.8f} {order.base_symbol}/{order.quote_symbol}")
         print(f"{prefix}   Reason: {order.reason}")
@@ -249,7 +252,6 @@ class OrderManager:
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         print(f"{prefix} ✓ Order #{order.internal_id} submitted successfully")
         print(f"{prefix}   Transaction: {order.bscscan_url}")
-        print(f"{prefix}   Please wait ~5-10 seconds for confirmation...")
     
     def _log_retry(self, order: OrderInfo, attempt: int, error: Exception):
         """Log retry attempt."""

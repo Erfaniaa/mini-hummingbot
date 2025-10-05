@@ -70,6 +70,10 @@ class DexSimpleSwap:
     
     def _finalize(self, tx_hash: str) -> str:
         """Finalize swap: take final snapshot and print reports."""
+        # Wait briefly for transaction to be mined and balance to update
+        import time
+        time.sleep(3)
+        
         # Take final snapshot
         self.reporter.take_snapshot(self.connector, force=True)
         
@@ -128,6 +132,7 @@ class DexSimpleSwap:
                 price=current_price,
                 reason=f"Exact-output swap: receive exactly {amount} {target_out_symbol}"
             )
+            order.spend_symbol = spend_symbol
             
             # Best-effort balance pre-check using estimator (padded by slippage for safety)
             try:
@@ -216,6 +221,7 @@ class DexSimpleSwap:
                     price=current_price,
                     reason=f"Fallback market swap after exact-out failure"
                 )
+                fallback_order.spend_symbol = spend_symbol
                 
                 # Validate fallback order
                 check = self.order_manager.validate_order(
@@ -294,6 +300,7 @@ class DexSimpleSwap:
             price=current_price,
             reason=f"Market swap: spend {amount_q} {spend_symbol}"
         )
+        order.spend_symbol = spend_symbol
 
         # Validate before submission
         check = self.order_manager.validate_order(
