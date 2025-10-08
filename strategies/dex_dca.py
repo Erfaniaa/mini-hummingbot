@@ -114,6 +114,9 @@ class DexDCA:
         
         # Execute order for each wallet
         for wallet_idx, (conn, order_mgr) in enumerate(zip(self.connectors, self.order_managers)):
+            # Determine spend symbol
+            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
+            
             # Create order
             order = order_mgr.create_order(
                 base_symbol=self.cfg.base_symbol,
@@ -123,9 +126,9 @@ class DexDCA:
                 price=price,
                 reason=f"DCA order {order_num}/{self.cfg.num_orders}"
             )
+            order.spend_symbol = spend_symbol
             
             # Determine spend amount for validation
-            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
             if is_exact_output_case(basis_is_base, spend_is_base):
                 # Estimate spend for validation (with buffer)
                 spend_amt_estimate = compute_spend_amount(price, amount, basis_is_base, spend_is_base)

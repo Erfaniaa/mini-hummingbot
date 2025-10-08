@@ -181,6 +181,9 @@ class DexBatchSwap:
         
         # Create order for each wallet
         for wallet_idx, (conn, order_mgr) in enumerate(zip(self.connectors, self.order_managers)):
+            # Determine spend symbol
+            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
+            
             # Create order
             order = order_mgr.create_order(
                 base_symbol=self.cfg.base_symbol,
@@ -190,9 +193,9 @@ class DexBatchSwap:
                 price=price,
                 reason=f"Price level {li+1}/{len(self.levels)}: {self.levels[li]:.8f}"
             )
+            order.spend_symbol = spend_symbol
             
             # Determine spend amount for validation
-            spend_symbol = self.cfg.base_symbol if spend_is_base else self.cfg.quote_symbol
             if is_exact_output_case(basis_is_base, spend_is_base):
                 # For exact output, we don't know exact spend until swap, use estimate
                 spend_amt_estimate = compute_spend_amount(price, amount_user_basis, basis_is_base, spend_is_base)
