@@ -341,6 +341,10 @@ class DexPureMarketMaking:
         
         print("\n[dex_pmm] Stopping strategy...")
         
+        # Wait briefly for any pending transactions to be confirmed
+        import time
+        time.sleep(1)
+        
         # Print final snapshots and P&L reports
         for i, reporter in enumerate(self.reporters):
             try:
