@@ -126,14 +126,18 @@ class DexDCA:
                 price=price,
                 reason=f"DCA order {order_num}/{self.cfg.num_orders}"
             )
-            order.spend_symbol = spend_symbol
             
             # Determine spend amount for validation
             if is_exact_output_case(basis_is_base, spend_is_base):
+                # amount is target output
+                target_out_symbol = self.cfg.quote_symbol if spend_is_base else self.cfg.base_symbol
+                order.amount_symbol = target_out_symbol
                 # Estimate spend for validation (with buffer)
                 spend_amt_estimate = compute_spend_amount(price, amount, basis_is_base, spend_is_base)
                 spend_amt_estimate = self._quantize(spend_symbol, spend_amt_estimate * 1.1)
             else:
+                # amount is spend amount
+                order.amount_symbol = spend_symbol
                 spend_amt = compute_spend_amount(price, amount, basis_is_base, spend_is_base)
                 spend_amt_estimate = self._quantize(spend_symbol, spend_amt)
             

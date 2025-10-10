@@ -44,7 +44,7 @@ class OrderInfo:
     amount: float
     price: Optional[float]
     reason: str  # why this order was placed
-    spend_symbol: Optional[str] = None  # symbol being spent (for display)
+    amount_symbol: Optional[str] = None  # symbol of the amount field (for display)
     tx_hash: Optional[str] = None
     bscscan_url: Optional[str] = None
     status: str = "pending"  # pending, submitted, filled, failed, cancelled
@@ -240,8 +240,8 @@ class OrderManager:
         
         print(f"{timestamp} {prefix} Submitting order #{order.internal_id} (attempt {attempt + 1}/{self.max_retries})")
         print(f"{prefix}   Side: {side_str} {order.base_symbol}/{order.quote_symbol}")
-        # Use spend_symbol if available, otherwise fall back to old logic
-        amount_symbol = order.spend_symbol if order.spend_symbol else (order.quote_symbol if order.side == 'buy' else order.base_symbol)
+        # Use amount_symbol if available, otherwise fall back to old logic
+        amount_symbol = order.amount_symbol if order.amount_symbol else (order.quote_symbol if order.side == 'buy' else order.base_symbol)
         print(f"{prefix}   Amount: {order.amount} {amount_symbol}")
         if order.price:
             print(f"{prefix}   Price: {order.price:.8f} {order.base_symbol}/{order.quote_symbol}")

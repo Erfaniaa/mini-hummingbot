@@ -132,7 +132,7 @@ class DexSimpleSwap:
                 price=current_price,
                 reason=f"Exact-output swap: receive exactly {amount} {target_out_symbol}"
             )
-            order.spend_symbol = spend_symbol
+            order.amount_symbol = target_out_symbol  # amount is target output
             
             # Best-effort balance pre-check using estimator (padded by slippage for safety)
             try:
@@ -221,7 +221,7 @@ class DexSimpleSwap:
                     price=current_price,
                     reason=f"Fallback market swap after exact-out failure"
                 )
-                fallback_order.spend_symbol = spend_symbol
+                fallback_order.amount_symbol = spend_symbol  # amount is spend
                 
                 # Validate fallback order
                 check = self.order_manager.validate_order(
@@ -300,7 +300,7 @@ class DexSimpleSwap:
             price=current_price,
             reason=f"Market swap: spend {amount_q} {spend_symbol}"
         )
-        order.spend_symbol = spend_symbol
+        order.amount_symbol = spend_symbol  # amount is spend
 
         # Validate before submission
         check = self.order_manager.validate_order(
