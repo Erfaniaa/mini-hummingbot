@@ -354,8 +354,10 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             return
     pw = getpass.getpass("Keystore passphrase: ")
     private_keys = []
+    wallet_names = []
     try:
         for i in selected:
+            wallet_names.append(wallets[i - 1].name)
             private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
     except Exception as e:
         print(f"Error unlocking wallet(s): {e}")
@@ -473,6 +475,7 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             distribution=distribution,
             interval_seconds=interval_sec,
             slippage_bps=sl_bps,
+            wallet_names=wallet_names,
         )
         strat = DexBatchSwap(cfg)
         print("Running... Type Ctrl+C to stop.")
@@ -521,8 +524,10 @@ def run_dex_pure_mm(ks: Keystore) -> None:
             return
     pw = getpass.getpass("Keystore passphrase: ")
     private_keys = []
+    wallet_names = []
     try:
         for i in selected:
+            wallet_names.append(wallets[i - 1].name)
             private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
     except Exception as e:
         print(f"Error unlocking wallet(s): {e}")
@@ -622,6 +627,7 @@ def run_dex_pure_mm(ks: Keystore) -> None:
             refresh_seconds=refresh_seconds,
             slippage_bps=sl_bps,
             tick_interval_seconds=tick_interval,
+            wallet_names=wallet_names,
         )
         strat = DexPureMarketMaking(cfg)
         print("Running... Type Ctrl+C to stop.")
@@ -670,8 +676,10 @@ def run_dex_dca(ks: Keystore) -> None:
             return
     pw = getpass.getpass("Keystore passphrase: ")
     private_keys = []
+    wallet_names = []
     try:
         for i in selected:
+            wallet_names.append(wallets[i - 1].name)
             private_keys.append(ks.get_private_key(wallets[i - 1].name, pw))
     except Exception as e:
         print(f"Error unlocking wallet(s): {e}")
@@ -771,6 +779,7 @@ def run_dex_dca(ks: Keystore) -> None:
             num_orders=num_orders,
             distribution=distribution,
             slippage_bps=sl_bps,
+            wallet_names=wallet_names,
         )
         strat = DexDCA(cfg)
         print("Running... Type Ctrl+C to stop.")

@@ -31,6 +31,7 @@ class DexBatchSwapConfig:
     spend_is_base: Optional[bool] = None
     interval_seconds: float = 1.0
     slippage_bps: int = 50
+    wallet_names: Optional[List[str]] = None  # optional wallet names for logging
 
 
 def _compute_distribution_weights(n: int, kind: str) -> List[float]:
@@ -84,7 +85,9 @@ class DexBatchSwap:
         self.reporters: List[PeriodicReporter] = []
         
         for i, conn in enumerate(self.connectors):
-            wallet_name = f"wallet_{i+1}"
+            # Use provided wallet name if available, otherwise fallback to wallet_N
+            wallet_name = (cfg.wallet_names[i] if cfg.wallet_names and i < len(cfg.wallet_names) 
+                          else f"wallet_{i+1}")
             self.order_managers.append(OrderManager(wallet_name=wallet_name, strategy_name="dex_batch_swap"))
             self.reporters.append(PeriodicReporter(
                 wallet_name=wallet_name,

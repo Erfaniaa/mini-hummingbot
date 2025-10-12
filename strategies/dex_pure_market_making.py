@@ -29,6 +29,7 @@ class DexPureMMConfig:
     amount_basis_is_base: Optional[bool] = None
     slippage_bps: int = 50
     tick_interval_seconds: float = 1.0
+    wallet_names: Optional[List[str]] = None  # optional wallet names for logging
 
 
 class DexPureMarketMaking:
@@ -58,7 +59,9 @@ class DexPureMarketMaking:
         self.reporters: List[PeriodicReporter] = []
         
         for i, conn in enumerate(self.connectors):
-            wallet_name = f"wallet_{i+1}"
+            # Use provided wallet name if available, otherwise fallback to wallet_N
+            wallet_name = (cfg.wallet_names[i] if cfg.wallet_names and i < len(cfg.wallet_names) 
+                          else f"wallet_{i+1}")
             self.order_managers.append(OrderManager(wallet_name=wallet_name, strategy_name="dex_pmm"))
             self.reporters.append(PeriodicReporter(
                 wallet_name=wallet_name,
