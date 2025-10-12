@@ -236,11 +236,11 @@ class DexBatchSwap:
                     )
             
             success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
+            # Wait briefly after each submit to allow nonce to update (even if failed)
+            import time
+            time.sleep(3)
             if success:
                 order_mgr.mark_filled(order)
-                # Wait briefly to allow transaction to propagate and nonce to update
-                import time
-                time.sleep(2)
         
         # Mark level as done
         self.done[li] = True
