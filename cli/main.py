@@ -250,7 +250,8 @@ def run_dex_simple_swap(ks: Keystore) -> None:
         return
     # Trade side (direction)
     print("Trade side: 1) Sell base for quote  2) Buy base with quote")
-    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    default_side = "1" if defaults.get("spend_is_base", True) else "2"
+    ts = prompt(f"Choose 1 or 2 [{default_side}]: ").strip() or default_side
     if ts not in {"1", "2"}:
         print("Invalid trade side.")
         return
@@ -285,7 +286,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_basis_is_base else 'quote'}), slippage={sl_bps} bps")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
-        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_basis_is_base, "slippage_bps": sl_bps})
+        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_basis_is_base, "spend_is_base": spend_is_base, "slippage_bps": sl_bps})
     go = prompt("Proceed? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -370,7 +371,8 @@ def run_dex_batch_swap(ks: Keystore) -> None:
         return
     # Direction and amounts
     print("Trade side: 1) Sell base for quote  2) Buy base with quote")
-    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    default_side = "1" if defaults.get("spend_is_base", True) else "2"
+    ts = prompt(f"Choose 1 or 2 [{default_side}]: ").strip() or default_side
     if ts not in {"1", "2"}:
         print("Invalid trade side.")
         return
@@ -692,7 +694,8 @@ def run_dex_dca(ks: Keystore) -> None:
         return
     # Direction and totals
     print("Trade side: 1) Sell base for quote  2) Buy base with quote")
-    ts = prompt("Choose 1 or 2 [1]: ").strip() or "1"
+    default_side = "1" if defaults.get("spend_is_base", True) else "2"
+    ts = prompt(f"Choose 1 or 2 [{default_side}]: ").strip() or default_side
     if ts not in {"1", "2"}:
         print("Invalid trade side.")
         return
