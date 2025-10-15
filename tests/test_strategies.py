@@ -84,14 +84,21 @@ class FakeConnector:
 
     def get_price(self, base_symbol, quote_symbol):
         """Return current market price"""
+        # Allow price to be a callable for dynamic prices
+        if callable(self._price):
+            return self._price()
         return self._price
 
     def get_price_fast(self, base_symbol, quote_symbol):
         """Return fast price (same as regular price for testing)"""
+        if callable(self._price):
+            return self._price()
         return self._price
 
     def get_price_side(self, base_symbol, quote_symbol, side='buy', fast=True):
         """Return price with side consideration"""
+        if callable(self._price):
+            return self._price()
         return self._price
 
     def get_balance(self, symbol):
@@ -349,8 +356,8 @@ def test_dex_batch_swap_uniform_distribution_sell():
     assert fake.get_balance("BASE") < initial_base, "BASE should decrease"
 
 
-def test_dex_batch_swap_geometric_distribution_buy():
-    """Test batch swap with geometric distribution buying BASE"""
+def test_dex_batch_swap_bell_distribution_buy():
+    """Test batch swap with bell distribution buying BASE"""
     fake = FakeConnector(base_balance=10.0, quote_balance=100.0, price=2.0)
     cfg = DexBatchSwapConfig(
         rpc_url="",
@@ -363,7 +370,7 @@ def test_dex_batch_swap_geometric_distribution_buy():
         min_price=1.8,
         max_price=2.2,
         num_orders=4,
-        distribution="geometric",
+        distribution="bell",
         interval_seconds=0.01,
         slippage_bps=50,
         spend_is_base=False,
@@ -466,8 +473,9 @@ def test_dex_batch_swap_varying_num_orders():
 
 
 def test_dex_pure_mm_single_level_each_side():
-    """Test pure MM with one level on each side"""
-    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
+    """Test pure MM with one level on each side - price triggers upper level"""
+    price_ref = [2.0]
+    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
     cfg = DexPureMMConfig(
         rpc_url="",
         private_keys=[""],
@@ -485,15 +493,23 @@ def test_dex_pure_mm_single_level_each_side():
     )
     strat = DexPureMarketMaking(cfg, connectors=[fake])  # type: ignore[arg-type]
     
+    # First tick: levels are built but no orders yet (price is mid-level)
+    strat._on_tick()
+    initial_txs = len(fake._txs)
+    
+    # Change price to trigger upper level (sell)
+    price_ref[0] = 2.11  # Above upper level (2.0 * 1.05 = 2.1)
     strat._on_tick()
     
-    # Should place orders on both sides
-    assert len(fake._txs) >= 1, "Should place at least one order"
+    # Should have placed a sell order
+    assert len(fake._txs) > initial_txs, "Should place sell order when price hits upper level"
 
 
 def test_dex_pure_mm_multiple_levels():
-    """Test pure MM with multiple levels on each side"""
-    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
+    """Test pure MM with multiple levels - triggers different levels"""
+    # Use a list to make price mutable and shared
+    price_ref = [2.0]
+    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
     cfg = DexPureMMConfig(
         rpc_url="",
         private_keys=[""],
@@ -511,23 +527,32 @@ def test_dex_pure_mm_multiple_levels():
     )
     strat = DexPureMarketMaking(cfg, connectors=[fake])  # type: ignore[arg-type]
     
+    # Build levels
     strat._on_tick()
     
-    # Should place multiple orders
-    assert len(fake._txs) >= 1, "Should place multiple orders"
+    # Trigger lower level (buy) - level is at 2.0 * 0.9 = 1.8
+    price_ref[0] = 1.79  # Below 1.8
+    strat._on_tick()
+    assert len(fake._txs) >= 1, "Should place buy order"
+    
+    # Trigger upper level (sell) - level is at 2.0 * 1.1 = 2.2
+    price_ref[0] = 2.21  # Above 2.2
+    strat._on_tick()
+    assert len(fake._txs) >= 2, "Should place sell order too"
 
 
 def test_dex_pure_mm_asymmetric_spreads():
-    """Test pure MM with different upper and lower spreads"""
-    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
+    """Test pure MM with asymmetric spreads - tighter lower, wider upper"""
+    price_ref = [2.0]
+    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
     cfg = DexPureMMConfig(
         rpc_url="",
         private_keys=[""],
         chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
-        upper_percent=15.0,
-        lower_percent=5.0,
+        upper_percent=15.0,  # Wider spread above
+        lower_percent=5.0,   # Tighter spread below
         levels_each_side=2,
         order_amount=3.0,
         amount_is_base=True,
@@ -539,12 +564,16 @@ def test_dex_pure_mm_asymmetric_spreads():
     
     strat._on_tick()
     
-    assert len(fake._txs) >= 1, "Should place orders with asymmetric spreads"
+    # Price drops to trigger lower level - level is at 2.0 * 0.95 = 1.9
+    price_ref[0] = 1.89  # Below 1.9
+    strat._on_tick()
+    assert len(fake._txs) >= 1, "Should trigger lower level with tighter spread"
 
 
 def test_dex_pure_mm_quote_denominated():
     """Test pure MM with quote-denominated order amounts"""
-    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
+    price_ref = [2.0]
+    fake = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
     cfg = DexPureMMConfig(
         rpc_url="",
         private_keys=[""],
@@ -564,13 +593,18 @@ def test_dex_pure_mm_quote_denominated():
     
     strat._on_tick()
     
+    # Price rises to trigger upper level - level is at 2.0 * 1.05 = 2.1
+    price_ref[0] = 2.11  # Above 2.1
+    strat._on_tick()
     assert len(fake._txs) >= 1, "Should work with quote-denominated amounts"
 
 
 def test_dex_pure_mm_multi_wallet():
-    """Test pure MM with multiple wallets"""
-    fake1 = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
-    fake2 = FakeConnector(base_balance=100.0, quote_balance=100.0, price=2.0)
+    """Test pure MM with multiple wallets - each wallet independently"""
+    # Shared price reference
+    price_ref = [2.0]
+    fake1 = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
+    fake2 = FakeConnector(base_balance=100.0, quote_balance=100.0, price=lambda: price_ref[0])
     
     cfg = DexPureMMConfig(
         rpc_url="",
@@ -591,8 +625,12 @@ def test_dex_pure_mm_multi_wallet():
     
     strat._on_tick()
     
+    # Change shared price to trigger a level - level at 2.0 * 0.95 = 1.9
+    price_ref[0] = 1.89  # Below 1.9
+    strat._on_tick()
+    
     total_txs = len(fake1._txs) + len(fake2._txs)
-    assert total_txs >= 1, "Should place orders across multiple wallets"
+    assert total_txs >= 1, "Should place orders when price triggers level"
 
 
 def test_dex_dca_uniform_distribution_sell():
@@ -624,8 +662,8 @@ def test_dex_dca_uniform_distribution_sell():
     assert fake.get_balance("BASE") < initial_base, "BASE should decrease"
 
 
-def test_dex_dca_geometric_distribution_buy():
-    """Test DCA with geometric distribution buying BASE"""
+def test_dex_dca_random_uniform_distribution_buy():
+    """Test DCA with random_uniform distribution buying BASE"""
     fake = FakeConnector(base_balance=10.0, quote_balance=100.0, price=2.0)
     cfg = DexDCAConfig(
         rpc_url="",
@@ -637,7 +675,7 @@ def test_dex_dca_geometric_distribution_buy():
         amount_is_base=False,
         interval_seconds=0.01,
         num_orders=4,
-        distribution="geometric",
+        distribution="random_uniform",
         slippage_bps=50,
         spend_is_base=False,
     )
