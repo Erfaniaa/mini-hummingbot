@@ -32,6 +32,8 @@ class DexBatchSwapConfig:
     interval_seconds: float = 1.0
     slippage_bps: int = 50
     wallet_names: Optional[List[str]] = None  # optional wallet names for logging
+    # MEV protection: use PancakeSwap private RPC to prevent frontrunning/sandwich attacks
+    use_mev_protection: bool = False
 
 
 def _compute_distribution_weights(n: int, kind: str) -> List[float]:
@@ -69,7 +71,7 @@ class DexBatchSwap:
     def __init__(self, cfg: DexBatchSwapConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
         self.connectors: List[PancakeSwapConnector] = connectors or [
-            PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id)
+            PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id, use_mev_protection=cfg.use_mev_protection)
             for pk in cfg.private_keys
         ]
         self.levels: List[float] = _generate_levels(cfg.min_price, cfg.max_price, cfg.num_orders)

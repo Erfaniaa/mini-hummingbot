@@ -26,6 +26,8 @@ class DexSimpleSwapConfig:
     amount_basis_is_base: Optional[bool] = None
     # Optional label for logging (e.g., wallet name)
     label: Optional[str] = None
+    # MEV protection: use PancakeSwap private RPC to prevent frontrunning/sandwich attacks
+    use_mev_protection: bool = False
 
 
 class DexSimpleSwap:
@@ -41,6 +43,7 @@ class DexSimpleSwap:
             rpc_url=cfg.rpc_url,
             private_key=cfg.private_key,
             chain_id=cfg.chain_id,
+            use_mev_protection=cfg.use_mev_protection,
         )
         
         # Initialize order manager and reporter
