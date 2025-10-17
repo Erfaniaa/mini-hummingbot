@@ -264,25 +264,38 @@ class DexPureMarketMaking:
             print()
 
         # Check price levels and execute orders
-        fired = False
-        fired_level = None
+        # Execute both upper and lower if triggered (sequentially to avoid nonce issues)
+        fired_upper = False
+        fired_lower = False
+        upper_level = None
+        lower_level = None
         
         # Check upper levels (sell base)
         for lvl in sorted(self.upper_levels):
             if px >= lvl:
                 if self._execute_order_at_level(lvl, px, is_upper=True):
-                    fired = True
-                    fired_level = f"upper {lvl:.8f}"
+                    fired_upper = True
+                    upper_level = lvl
                 break
         
-        # If no upper level triggered, check lower levels (buy base)
-        if not fired:
-            for lvl in sorted(self.lower_levels, reverse=True):
-                if px <= lvl:
-                    if self._execute_order_at_level(lvl, px, is_upper=False):
-                        fired = True
-                        fired_level = f"lower {lvl:.8f}"
-                    break
+        # Also check lower levels (buy base) - execute even if upper fired
+        for lvl in sorted(self.lower_levels, reverse=True):
+            if px <= lvl:
+                if self._execute_order_at_level(lvl, px, is_upper=False):
+                    fired_lower = True
+                    lower_level = lvl
+                break
+        
+        # Track what fired for logging
+        fired = fired_upper or fired_lower
+        if fired_upper and fired_lower:
+            fired_level = f"upper {upper_level:.8f} and lower {lower_level:.8f}"
+        elif fired_upper:
+            fired_level = f"upper {upper_level:.8f}"
+        elif fired_lower:
+            fired_level = f"lower {lower_level:.8f}"
+        else:
+            fired_level = None
         
         # Periodic status logging (every 10 seconds)
         if int(now) % 10 == 0:
