@@ -57,14 +57,18 @@ class FakeConnector:
         return self.current_price
     
     def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps, side):
-        """Simulate a market swap and track details."""
+        """Simulate a market swap and track details.
+        
+        Convention: self.current_price is quote_per_base (e.g., USDT per BNB)
+        Example: price=10.0 means 1 BASE = 10 QUOTE
+        """
         self.tx_counter += 1
         tx_hash = f"0x{'a' * 63}{self.tx_counter}"
         
         # Calculate amounts
         if side == "sell":
             spend_amount = amount if amount_is_base else amount / self.current_price
-            receive_amount = spend_amount * self.current_price if amount_is_base else amount
+            receive_amount = spend_amount * self.current_price if amount_is_base else amount  # Already correct!
             
             # Check balance
             if spend_amount > self.base_balance:
@@ -85,7 +89,7 @@ class FakeConnector:
             })
         else:  # buy
             spend_amount = amount if not amount_is_base else amount * self.current_price
-            receive_amount = spend_amount / self.current_price if not amount_is_base else amount
+            receive_amount = spend_amount / self.current_price if not amount_is_base else amount  # Already correct!
             
             # Check balance
             if spend_amount > self.quote_balance:
@@ -108,7 +112,11 @@ class FakeConnector:
         return tx_hash
     
     def swap_exact_out(self, token_in_symbol, token_out_symbol, target_out_amount, slippage_bps=50):
-        """Execute exact-output swap (receive exact amount of output token)."""
+        """Execute exact-output swap (receive exact amount of output token).
+        
+        Convention: self.current_price is quote_per_base (e.g., USDT per BNB)
+        Example: price=10.0 means 1 BASE = 10 QUOTE
+        """
         self.tx_counter += 1
         tx_hash = f"0x{'e' * 63}{self.tx_counter}"
         
@@ -116,7 +124,7 @@ class FakeConnector:
         if token_out_symbol.upper() in ["BASE", "LINK"]:
             # Buying BASE - receive exact BASE amount
             base_received = target_out_amount
-            quote_spent = base_received / self.current_price
+            quote_spent = base_received * self.current_price  # Fixed: multiply, not divide
             
             # Check balance
             if quote_spent > self.quote_balance:
@@ -139,7 +147,7 @@ class FakeConnector:
         else:
             # Selling BASE - receive exact QUOTE amount
             quote_received = target_out_amount
-            base_spent = quote_received * self.current_price
+            base_spent = quote_received / self.current_price  # Fixed: divide, not multiply
             
             # Check balance
             if base_spent > self.base_balance:
