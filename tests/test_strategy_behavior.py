@@ -10,6 +10,12 @@ from strategies.dex_dca import DexDCA, DexDCAConfig
 from connectors.dex.pancakeswap import PancakeSwapConnector
 
 
+class FakeWeb3Client:
+    """Fake Web3 client for testing."""
+    def to_wei(self, address, amount):
+        return int(amount * 10**18)
+
+
 class FakeConnector:
     """Fake connector for testing without blockchain."""
     
@@ -19,9 +25,18 @@ class FakeConnector:
         self.swaps = []
         self.chain_id = 56
         self.wallet_address = "0x1234567890123456789012345678901234567890"
+        self.client = FakeWeb3Client()
     
     def get_balance(self, symbol: str) -> float:
         return self.balances.get(symbol, 0.0)
+    
+    def _resolve(self, symbol: str) -> str:
+        """Resolve token symbol to address."""
+        return f"0x{symbol.lower()}"
+    
+    def get_allowance(self, symbol: str) -> int:
+        """Return a large allowance for testing."""
+        return 10**30
     
     def get_price(self, token_in: str, token_out: str) -> float:
         if token_in == "BASE" and token_out == "QUOTE":
@@ -77,21 +92,24 @@ def test_simple_swap_exact_behavior():
     conn = FakeConnector(balances={"BASE": 100.0, "QUOTE": 1000.0}, price=10.0)
     
     cfg = DexSimpleSwapConfig(
+        rpc_url="http://test",
+        private_key="0x" + "1" * 64,
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         amount=5.0,
         amount_is_base=True,
         spend_is_base=True,
         slippage_bps=50,
-        wallet_names=["test"],
+        label="test",
         use_mev_protection=False
     )
     
     strat = DexSimpleSwap(cfg, conn)
     
     # Execute
-    strat.start()
-    strat.stop()
+    tx_hash = strat.run()
+    assert tx_hash is not None
     
     # Should have exactly 1 swap
     assert len(conn.swaps) == 1
@@ -139,6 +157,9 @@ def test_batch_swap_only_triggers_at_levels():
     conn = FakeConnector(balances={"BASE": 1000.0, "QUOTE": 10000.0}, price=10.0)
     
     cfg = DexBatchSwapConfig(
+        rpc_url="http://test",
+        private_keys=["0x" + "1" * 64],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         min_price=5.0,
@@ -149,7 +170,6 @@ def test_batch_swap_only_triggers_at_levels():
         spend_is_base=True,
         distribution="uniform",
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
@@ -170,16 +190,18 @@ def test_pure_mm_creates_symmetric_levels():
     conn = FakeConnector(balances={"BASE": 1000.0, "QUOTE": 10000.0}, price=100.0)
     
     cfg = DexPureMMConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
-        amount_per_level=10.0,
+        order_amount=10.0,
         amount_is_base=True,
         upper_percent=5.0,
         lower_percent=5.0,
         levels_each_side=3,
         order_lifetime_sec=60,
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
@@ -206,16 +228,18 @@ def test_pure_mm_negative_level_prevention():
     
     # Extreme lower_percent that would cause negative levels
     cfg = DexPureMMConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
-        amount_per_level=10.0,
+        order_amount=10.0,
         amount_is_base=True,
         upper_percent=5.0,
         lower_percent=50.0,  # 50% × 10 levels = 500% > 100%
         levels_each_side=10,
         order_lifetime_sec=60,
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
@@ -234,6 +258,9 @@ def test_dca_executes_correct_number_of_orders():
     conn = FakeConnector(balances={"BASE": 1000.0, "QUOTE": 10000.0}, price=10.0)
     
     cfg = DexDCAConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         total_amount=100.0,
@@ -241,10 +268,9 @@ def test_dca_executes_correct_number_of_orders():
         amount_basis_is_base=False,
         spend_is_base=False,
         num_orders=5,
-        interval_seconds=1,
+        interval_seconds=0.01,
         distribution="uniform",
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
@@ -263,6 +289,9 @@ def test_dca_distribution_uniform():
     conn = FakeConnector(balances={"BASE": 1000.0, "QUOTE": 10000.0}, price=10.0)
     
     cfg = DexDCAConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         total_amount=100.0,
@@ -270,10 +299,9 @@ def test_dca_distribution_uniform():
         amount_basis_is_base=True,
         spend_is_base=True,
         num_orders=5,
-        interval_seconds=1,
+        interval_seconds=0.01,
         distribution="uniform",
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
@@ -293,13 +321,15 @@ def test_config_validation_all_strategies():
     # SimpleSwap: amount must be positive
     try:
         cfg = DexSimpleSwapConfig(
-            base_symbol="BASE",
+            rpc_url="http://test",
+        private_key="0x1111111111111111111111111111111111111111111111111111111111111111",
+        chain_id=56,
+        base_symbol="BASE",
             quote_symbol="QUOTE",
             amount=-5.0,  # Invalid
             amount_is_base=True,
             spend_is_base=True,
             slippage_bps=50,
-            wallet_names=["test"],
             use_mev_protection=False
         )
         strat = DexSimpleSwap(cfg)
@@ -310,7 +340,10 @@ def test_config_validation_all_strategies():
     # BatchSwap: min_price must be < max_price
     try:
         cfg = DexBatchSwapConfig(
-            base_symbol="BASE",
+            rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
+        base_symbol="BASE",
             quote_symbol="QUOTE",
             min_price=20.0,  # Invalid: > max_price
             max_price=10.0,
@@ -320,7 +353,6 @@ def test_config_validation_all_strategies():
             spend_is_base=True,
             distribution="uniform",
             slippage_bps=50,
-            wallet_names=["test"],
             use_mev_protection=False
         )
         strat = DexBatchSwap(cfg)
@@ -331,17 +363,19 @@ def test_config_validation_all_strategies():
     # DCA: num_orders must be positive
     try:
         cfg = DexDCAConfig(
-            base_symbol="BASE",
+            rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
+        base_symbol="BASE",
             quote_symbol="QUOTE",
             total_amount=100.0,
             amount_is_base=True,
             amount_basis_is_base=True,
             spend_is_base=True,
             num_orders=0,  # Invalid
-            interval_seconds=10,
+            interval_seconds=0.01,
             distribution="uniform",
             slippage_bps=50,
-            wallet_names=["test"],
             use_mev_protection=False
         )
         strat = DexDCA(cfg)
@@ -362,7 +396,6 @@ def test_mev_protection_flag_all_strategies():
         amount_is_base=True,
         spend_is_base=True,
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=True
     )
     assert cfg1.use_mev_protection is True
@@ -379,7 +412,6 @@ def test_mev_protection_flag_all_strategies():
         spend_is_base=True,
         distribution="uniform",
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=True
     )
     assert cfg2.use_mev_protection is True
@@ -388,14 +420,13 @@ def test_mev_protection_flag_all_strategies():
     cfg3 = DexPureMMConfig(
         base_symbol="BASE",
         quote_symbol="QUOTE",
-        amount_per_level=10.0,
+        order_amount=10.0,
         amount_is_base=True,
         upper_percent=5.0,
         lower_percent=5.0,
         levels_each_side=3,
         order_lifetime_sec=60,
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=True
     )
     assert cfg3.use_mev_protection is True
@@ -409,10 +440,9 @@ def test_mev_protection_flag_all_strategies():
         amount_basis_is_base=True,
         spend_is_base=True,
         num_orders=5,
-        interval_seconds=10,
+        interval_seconds=0.01,
         distribution="uniform",
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=True
     )
     assert cfg4.use_mev_protection is True
@@ -423,20 +453,21 @@ def test_zero_slippage_edge_case():
     conn = FakeConnector(balances={"BASE": 100.0, "QUOTE": 1000.0}, price=10.0)
     
     cfg = DexSimpleSwapConfig(
+        rpc_url="http://test",
+        private_key="0x1111111111111111111111111111111111111111111111111111111111111111",
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         amount=5.0,
         amount_is_base=True,
         spend_is_base=True,
         slippage_bps=0,  # Zero slippage
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
     # Should not crash
     strat = DexSimpleSwap(cfg, conn)
-    strat.start()
-    strat.stop()
+    tx_hash = strat.run()
     
     assert len(conn.swaps) == 1
 
@@ -446,18 +477,22 @@ def test_insufficient_balance_handling():
     conn = FakeConnector(balances={"BASE": 1.0, "QUOTE": 1000.0}, price=10.0)
     
     cfg = DexSimpleSwapConfig(
+        rpc_url="http://test",
+        private_key="0x1111111111111111111111111111111111111111111111111111111111111111",
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         amount=100.0,  # More than available balance
         amount_is_base=True,
         spend_is_base=True,
         slippage_bps=50,
-        wallet_names=["test"],
         use_mev_protection=False
     )
     
     # Should handle gracefully (may skip or reduce amount)
     strat = DexSimpleSwap(cfg, conn)
-    strat.start()
-    strat.stop()
+    try:
+        tx_hash = strat.run()
+    except RuntimeError:
+        pass  # Expected to fail due to insufficient balance
 

@@ -154,7 +154,7 @@ def test_dex_pure_mm_config_has_mev_protection_field():
         levels_each_side=5,
         order_amount=1.0,
         amount_is_base=False,
-        refresh_seconds=60.0
+        refresh_seconds=9999
     )
     
     assert hasattr(config, 'use_mev_protection')
@@ -191,7 +191,7 @@ def test_dex_dca_config_has_mev_protection_field():
         quote_symbol="USDT",
         total_amount=10.0,
         amount_is_base=False,
-        interval_seconds=60.0,
+        interval_seconds=0.01,
         num_orders=5,
         distribution="uniform"
     )

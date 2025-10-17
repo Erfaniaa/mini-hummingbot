@@ -88,7 +88,7 @@ def test_dca_pick_chunk_zero_orders_left():
         quote_symbol="QUOTE",
         total_amount=100.0,
         amount_is_base=True,
-        interval_seconds=1.0,
+        interval_seconds=0.01,
         num_orders=5,
         distribution="uniform"
     )
@@ -132,8 +132,8 @@ def test_pure_mm_zero_price_display():
         levels_each_side=2,
         order_amount=10.0,
         amount_is_base=True,
-        refresh_seconds=60,
-        tick_interval_seconds=1.0
+        refresh_seconds=9999,
+        tick_interval_seconds=0.01
     )
     
     conn = FakeConnector()

@@ -1,13 +1,30 @@
 Mini-Hummingbot (PancakeSwap CLI)
 
 Getting Started
-- Create a Python 3.10+ venv
+- Create a Python 3.10+ venv: `python3 -m venv venv && source venv/bin/activate`
 - Install deps: `pip install -r requirements.txt`
 - Run the CLI: `python -m cli.main`
 - Add wallets via encrypted keystore
 - Approve tokens for PancakeSwap (one-time setup)
 - Select and configure a strategy
 - Monitor live with detailed order tracking and P&L updates
+
+Running Tests
+```bash
+# Quick test run
+./run_tests.sh
+
+# All tests with details
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/ -v
+
+# Specific test file
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/test_strategies.py -v
+
+# Specific test
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/test_strategies.py::test_dex_simple_swap_sell_base_exact_amount -v
+```
+
+Test Coverage: strategy execution, resilience/network failures, MEV protection, corner cases, price calculations
 
 Features
 - Encrypted keystore (multiple wallets)

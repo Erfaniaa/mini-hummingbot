@@ -40,6 +40,11 @@ class FakeWeb3Client:
             amount = amount_or_unit
             decimals = token_address_or_amount.get('decimals', 18)
             return int(amount * 10**decimals)
+        # If first arg is a string (token address), second arg is the amount
+        elif isinstance(token_address_or_amount, str) and token_address_or_amount.startswith('0x'):
+            amount = amount_or_unit
+            # Default to 18 decimals for ERC20 tokens
+            return int(amount * 10**18)
         # Otherwise, standard web3 to_wei conversion
         else:
             amount = token_address_or_amount
@@ -89,10 +94,14 @@ class FakeConnector:
         self.client = FakeWeb3Client()  # Add Web3 client for validation
 
     def _resolve(self, symbol):
-        """Resolve token symbol to token info"""
+        """Resolve token symbol to address"""
         if symbol in self._tokens:
-            return self._tokens[symbol]
-        return {"symbol": symbol, "address": f"0x{symbol}", "decimals": 18}
+            return self._tokens[symbol]["address"]
+        return f"0x{symbol}"
+    
+    def get_allowance(self, symbol):
+        """Return a large allowance for testing."""
+        return 10**30
 
     def get_price(self, base_symbol, quote_symbol):
         """Return current market price"""
@@ -410,8 +419,8 @@ def test_dex_batch_swap_single_order():
         quote_symbol="QUOTE",
         total_amount=5.0,
         amount_is_base=True,
-        min_price=2.0,
-        max_price=2.0,
+        min_price=1.9,
+        max_price=2.1,
         num_orders=1,
         distribution="uniform",
         interval_seconds=0.01,

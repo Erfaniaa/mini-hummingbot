@@ -28,6 +28,18 @@ class FakeConnector:
         self.swaps_executed = []
         self.tx_counter = 0
         
+        # Mock client for to_wei
+        self.client = Mock()
+        self.client.to_wei = lambda address, amount: int(amount * 10**18)
+        
+    def _resolve(self, symbol):
+        """Resolve token symbol to address (for testing just return symbol)."""
+        return f"0x{symbol.lower()}"
+    
+    def get_allowance(self, symbol):
+        """Return a large allowance for testing."""
+        return 10**30
+        
     def get_balance(self, symbol):
         if symbol.upper() in ["BASE", "LINK"]:
             return self.base_balance
@@ -230,7 +242,7 @@ def test_batch_swap_multiple_levels_triggered_simultaneously():
         max_price=15.0,
         num_orders=5,
         distribution="uniform",
-        interval_seconds=0.1
+        interval_seconds=0.01
     )
     
     strategy = DexBatchSwap(cfg, connectors=[conn])
@@ -273,7 +285,7 @@ def test_batch_swap_insufficient_balance_for_all_levels():
         max_price=15.0,
         num_orders=5,
         distribution="uniform",
-        interval_seconds=0.1
+        interval_seconds=0.01
     )
     
     strategy = DexBatchSwap(cfg, connectors=[conn])
@@ -307,8 +319,8 @@ def test_pure_mm_both_sides_triggered():
         levels_each_side=1,
         order_amount=10.0,
         amount_is_base=True,
-        refresh_seconds=60,
-        tick_interval_seconds=1.0
+        refresh_seconds=9999,
+        tick_interval_seconds=0.01
     )
     
     strategy = DexPureMarketMaking(cfg, connectors=[conn])
@@ -352,7 +364,7 @@ def test_dca_failed_order_tracking():
         amount_is_base=False,  # Spending QUOTE
         spend_is_base=False,   # Buying BASE
         num_orders=5,
-        interval_seconds=0.1,
+        interval_seconds=0.01,
         distribution="uniform"
     )
     
