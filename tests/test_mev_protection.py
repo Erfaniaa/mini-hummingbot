@@ -1,8 +1,11 @@
 """
 Tests for MEV protection functionality in PancakeSwap connector.
 
-MEV (Maximal Extractable Value) protection prevents frontrunning and sandwich attacks
-by routing transactions through PancakeSwap's private RPC endpoint.
+MEV (Maximal Extractable Value) protection reduces frontrunning and sandwich attacks
+by using multiple defensive strategies:
+- Higher gas price (20% premium) for faster inclusion
+- Short transaction deadlines (60s vs 600s)
+- Tight slippage tolerance
 """
 
 from __future__ import annotations
@@ -16,15 +19,8 @@ from strategies.dex_batch_swap import DexBatchSwapConfig
 from strategies.dex_dca import DexDCAConfig
 
 
-def test_mev_protected_rpc_endpoints_exist():
-    """Test that MEV protected RPC endpoints are configured for supported chains."""
-    assert 56 in PancakeSwapClient.MEV_PROTECTED_RPC
-    assert 97 in PancakeSwapClient.MEV_PROTECTED_RPC
-    assert PancakeSwapClient.MEV_PROTECTED_RPC[56] == "https://bscrpc.pancakeswap.finance"
-
-
-def test_pancakeswap_client_uses_mev_protected_rpc_when_enabled():
-    """Test that PancakeSwapClient uses MEV protected RPC when flag is enabled."""
+def test_mev_protection_stores_flag():
+    """Test that MEV protection flag is stored in client."""
     with patch('connectors.dex.pancakeswap.Web3') as mock_web3:
         mock_web3_instance = Mock()
         mock_web3_instance.is_connected.return_value = True
@@ -38,30 +34,57 @@ def test_pancakeswap_client_uses_mev_protected_rpc_when_enabled():
             use_mev_protection=True
         )
         
-        # Verify the correct RPC was used (MEV protected)
-        args, kwargs = mock_web3.HTTPProvider.call_args
-        assert args[0] == "https://bscrpc.pancakeswap.finance"
+        # Verify MEV protection flag is stored
+        assert hasattr(client, 'use_mev_protection')
+        assert client.use_mev_protection is True
 
 
-def test_pancakeswap_client_uses_normal_rpc_when_disabled():
-    """Test that PancakeSwapClient uses provided RPC when MEV protection is disabled."""
+def test_mev_protection_uses_higher_gas_price():
+    """Test that MEV protection adds 20% gas price premium."""
     with patch('connectors.dex.pancakeswap.Web3') as mock_web3:
         mock_web3_instance = Mock()
         mock_web3_instance.is_connected.return_value = True
+        mock_web3_instance.eth.gas_price = 5000000000  # 5 gwei
+        mock_web3_instance.eth.get_transaction_count.return_value = 1
+        mock_web3.return_value = mock_web3_instance
+        
+        # Create client with MEV protection enabled
+        client = PancakeSwapClient(
+            rpc_url="https://bsc-dataseed1.binance.org",
+            private_key="0x" + "11" * 32,
+            chain_id=56,
+            use_mev_protection=True
+        )
+        
+        # Get transaction params
+        params = client._default_tx_params()
+        
+        # Verify gas price has 20% premium
+        expected_gas_price = int(5000000000 * 1.20)  # 6 gwei
+        assert params["gasPrice"] == expected_gas_price
+
+
+def test_mev_protection_uses_normal_gas_when_disabled():
+    """Test that normal gas price is used when MEV protection is disabled."""
+    with patch('connectors.dex.pancakeswap.Web3') as mock_web3:
+        mock_web3_instance = Mock()
+        mock_web3_instance.is_connected.return_value = True
+        mock_web3_instance.eth.get_transaction_count.return_value = 1
         mock_web3.return_value = mock_web3_instance
         
         # Create client with MEV protection disabled
-        normal_rpc = "https://bsc-dataseed1.binance.org"
         client = PancakeSwapClient(
-            rpc_url=normal_rpc,
+            rpc_url="https://bsc-dataseed1.binance.org",
             private_key="0x" + "11" * 32,
             chain_id=56,
             use_mev_protection=False
         )
         
-        # Verify the normal RPC was used
-        args, kwargs = mock_web3.HTTPProvider.call_args
-        assert args[0] == normal_rpc
+        # Get transaction params without specifying gas price
+        params = client._default_tx_params()
+        
+        # Verify no gas price is set (will use network default)
+        assert "gasPrice" not in params
 
 
 def test_pancakeswap_connector_passes_mev_protection_to_client():
@@ -196,49 +219,6 @@ def test_dex_simple_swap_passes_mev_protection_to_connector():
         mock_connector_class.assert_called_once()
         call_kwargs = mock_connector_class.call_args[1]
         assert call_kwargs['use_mev_protection'] is True
-
-
-def test_mev_protection_for_testnet_chain():
-    """Test that MEV protection works correctly for testnet (chain 97)."""
-    with patch('connectors.dex.pancakeswap.Web3') as mock_web3:
-        mock_web3_instance = Mock()
-        mock_web3_instance.is_connected.return_value = True
-        mock_web3.return_value = mock_web3_instance
-        
-        # Create client with MEV protection on testnet
-        client = PancakeSwapClient(
-            rpc_url="https://data-seed-prebsc-1-s1.binance.org:8545",
-            private_key="0x" + "11" * 32,
-            chain_id=97,
-            use_mev_protection=True
-        )
-        
-        # Verify testnet MEV protected RPC was used
-        args, kwargs = mock_web3.HTTPProvider.call_args
-        assert args[0] == PancakeSwapClient.MEV_PROTECTED_RPC[97]
-
-
-def test_mev_protection_disabled_uses_provided_rpc():
-    """Test that when MEV protection is disabled, the provided RPC is used even for supported chains."""
-    with patch('connectors.dex.pancakeswap.Web3') as mock_web3:
-        mock_web3_instance = Mock()
-        mock_web3_instance.is_connected.return_value = True
-        mock_web3.return_value = mock_web3_instance
-        
-        # Create client with MEV protection disabled on a supported chain
-        custom_rpc = "https://custom-bsc-node.example.com"
-        client = PancakeSwapClient(
-            rpc_url=custom_rpc,
-            private_key="0x" + "11" * 32,
-            chain_id=56,  # Supported chain
-            use_mev_protection=False  # Explicitly disabled
-        )
-        
-        # Verify custom RPC is used when MEV protection is disabled
-        args, kwargs = mock_web3.HTTPProvider.call_args
-        assert args[0] == custom_rpc
-        # Verify we didn't accidentally use the MEV protected RPC
-        assert args[0] != PancakeSwapClient.MEV_PROTECTED_RPC[56]
 
 
 def test_connector_attribute_stores_mev_protection_state():

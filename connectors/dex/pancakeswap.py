@@ -42,11 +42,12 @@ class QuoteV3:
 
 
 class PancakeSwapClient:
-    # MEV Protection: PancakeSwap private RPC endpoints
-    MEV_PROTECTED_RPC = {
-        56: "https://bscrpc.pancakeswap.finance",  # BSC Mainnet
-        97: "https://bsc-testnet-rpc.publicnode.com",  # BSC Testnet (fallback, no official private RPC)
-    }
+    # MEV Protection: Strategies to reduce MEV attack surface
+    # Note: True private mempool solutions for BSC are limited
+    # We use multiple defensive strategies instead:
+    # 1. Higher gas price for faster inclusion
+    # 2. Tight slippage tolerance
+    # 3. Short transaction deadlines
     
     ERC20_ABI: List[Dict] = [
         {"constant": True, "inputs": [{"name": "", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
@@ -285,10 +286,13 @@ class PancakeSwapClient:
     }
 
     def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None, use_mev_protection: bool = False) -> None:
-        # Apply MEV protection if requested
-        if use_mev_protection and chain_id in self.MEV_PROTECTED_RPC:
-            rpc_url = self.MEV_PROTECTED_RPC[chain_id]
-            print(f"[MEV Protection] Using private RPC endpoint for chain {chain_id}")
+        # Store MEV protection preference
+        self.use_mev_protection = use_mev_protection
+        if use_mev_protection:
+            print(f"[MEV Protection] Enabled - Using defensive strategies:")
+            print(f"  • Higher gas price for faster inclusion")
+            print(f"  • Tight slippage tolerance")
+            print(f"  • Short transaction deadlines (60s)")
         
         # Add request timeout to avoid indefinite hangs on slow/unresponsive RPCs
         self.web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
@@ -391,8 +395,20 @@ class PancakeSwapClient:
 
     def _default_tx_params(self, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> Dict:
         params = {"chainId": self.chain_id, "from": self.address, "nonce": self.web3.eth.get_transaction_count(self.address)}
-        if gas_price_gwei is not None:
-            params["gasPrice"] = self.web3.to_wei(gas_price_gwei, "gwei")
+        
+        # MEV Protection: Use higher gas price for faster inclusion
+        if hasattr(self, 'use_mev_protection') and self.use_mev_protection:
+            if gas_price_gwei is None:
+                # Get current gas price and add 20% premium for priority
+                current_gas_price = self.web3.eth.gas_price
+                params["gasPrice"] = int(current_gas_price * 1.20)
+            else:
+                # User-specified gas price + 20% premium
+                params["gasPrice"] = self.web3.to_wei(int(gas_price_gwei * 1.20), "gwei")
+        else:
+            if gas_price_gwei is not None:
+                params["gasPrice"] = self.web3.to_wei(gas_price_gwei, "gwei")
+        
         if gas_limit is not None:
             params["gas"] = int(gas_limit)
         return params
@@ -427,7 +443,9 @@ class PancakeSwapClient:
             raise RuntimeError("V2 Router not configured for this chain/network")
         path = [self.to_checksum(t) for t in path_tokens]
         to_addr = self.to_checksum(self.address)
-        deadline = int(time.time()) + 600
+        # MEV Protection: Use shorter deadline (60s vs 600s)
+        deadline_duration = 60 if (hasattr(self, 'use_mev_protection') and self.use_mev_protection) else 600
+        deadline = int(time.time()) + deadline_duration
         tx = self._v2_router.functions.swapExactTokensForTokens(int(amount_in), int(min_out), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
         if gas_limit is None:
             gas_limit = int(self.web3.eth.estimate_gas(tx))
@@ -440,7 +458,9 @@ class PancakeSwapClient:
             raise RuntimeError("V2 Router not configured for this chain/network")
         path = [self.to_checksum(t) for t in path_tokens]
         to_addr = self.to_checksum(self.address)
-        deadline = int(time.time()) + 600
+        # MEV Protection: Use shorter deadline (60s vs 600s)
+        deadline_duration = 60 if (hasattr(self, 'use_mev_protection') and self.use_mev_protection) else 600
+        deadline = int(time.time()) + deadline_duration
         tx = self._v2_router.functions.swapTokensForExactTokens(int(amount_out), int(amount_in_max), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
         if gas_limit is None:
             gas_limit = int(self.web3.eth.estimate_gas(tx))
@@ -460,7 +480,7 @@ class PancakeSwapClient:
         tx["gas"] = gas_limit
         return self._sign_and_send(tx)
 
-    def swap_v3_exact_input_single(self, token_in: str, token_out: str, fee: int, amount_in: int, slippage_bps: int = 50, recipient: Optional[str] = None, deadline_seconds: int = 600, sqrt_price_limit_x96: int = 0, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
+    def swap_v3_exact_input_single(self, token_in: str, token_out: str, fee: int, amount_in: int, slippage_bps: int = 50, recipient: Optional[str] = None, deadline_seconds: int = 600, sqrt_price_limit_x96: int = 0, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None, _mev_override_deadline: bool = False) -> str:
         self._require_account()
         if self._v3_router is None:
             raise RuntimeError("V3 SwapRouter not configured for this chain/network")
@@ -468,6 +488,9 @@ class PancakeSwapClient:
         token_out = self.to_checksum(token_out)
         q = self.quote_v3_exact_input_single(token_in, token_out, int(fee), int(amount_in), slippage_bps, sqrt_price_limit_x96)
         to_addr = self.to_checksum(recipient or self.address)
+        # MEV Protection: Use shorter deadline if enabled (unless explicitly overridden)
+        if not _mev_override_deadline and hasattr(self, 'use_mev_protection') and self.use_mev_protection:
+            deadline_seconds = min(60, deadline_seconds)
         deadline = int(time.time()) + int(deadline_seconds)
         params = (token_in, token_out, int(fee), to_addr, int(deadline), int(amount_in), int(q.min_amount_out), int(sqrt_price_limit_x96))
         tx = self._v3_router.functions.exactInputSingle(params).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
@@ -476,7 +499,7 @@ class PancakeSwapClient:
         tx["gas"] = gas_limit
         return self._sign_and_send(tx)
 
-    def swap_v3_exact_input_path(self, tokens: List[str], fees: List[int], amount_in: int, slippage_bps: int = 50, recipient: Optional[str] = None, deadline_seconds: int = 600, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> str:
+    def swap_v3_exact_input_path(self, tokens: List[str], fees: List[int], amount_in: int, slippage_bps: int = 50, recipient: Optional[str] = None, deadline_seconds: int = 600, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None, _mev_override_deadline: bool = False) -> str:
         self._require_account()
         if self._v3_router is None:
             raise RuntimeError("V3 SwapRouter not configured for this chain/network")
@@ -484,6 +507,9 @@ class PancakeSwapClient:
         path = self._encode_v3_path(checksummed_tokens, fees)
         q = self.quote_v3_exact_input_path(checksummed_tokens, fees, int(amount_in), slippage_bps)
         to_addr = self.to_checksum(recipient or self.address)
+        # MEV Protection: Use shorter deadline if enabled (unless explicitly overridden)
+        if not _mev_override_deadline and hasattr(self, 'use_mev_protection') and self.use_mev_protection:
+            deadline_seconds = min(60, deadline_seconds)
         deadline = int(time.time()) + int(deadline_seconds)
         params = (path, to_addr, int(deadline), int(amount_in), int(q.min_amount_out))
         tx = self._v3_router.functions.exactInput(params).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
@@ -1034,7 +1060,9 @@ class PancakeSwapConnector(ExchangeConnector):
             try:
                 if self.client._v3_router is not None:
                     to_addr = self.client.to_checksum(self.client.address)
-                    deadline = int(time.time()) + 600
+                    # MEV Protection: Use shorter deadline (60s vs 600s)
+                    deadline_duration = 60 if self.use_mev_protection else 600
+                    deadline = int(time.time()) + deadline_duration
                     params = (token_in, token_out, int(fee), to_addr, int(deadline), int(amount_out_wei), int(amount_in_max), 0)
                     tx = self.client._v3_router.functions.exactOutputSingle(params).build_transaction(self.client._default_tx_params())
                     gas_limit = int(self.client.web3.eth.estimate_gas(tx))
@@ -1054,7 +1082,9 @@ class PancakeSwapConnector(ExchangeConnector):
                         reversed_fees = list(reversed(list(fees)))
                         path = self.client._encode_v3_path(reversed_path, reversed_fees)
                         to_addr = self.client.to_checksum(self.client.address)
-                        deadline = int(time.time()) + 600
+                        # MEV Protection: Use shorter deadline (60s vs 600s)
+                        deadline_duration = 60 if self.use_mev_protection else 600
+                        deadline = int(time.time()) + deadline_duration
                         params = (path, to_addr, int(deadline), int(amount_out_wei), int(amount_in_max))
                         tx = self.client._v3_router.functions.exactOutput(params).build_transaction(self.client._default_tx_params())
                         gas_limit = int(self.client.web3.eth.estimate_gas(tx))

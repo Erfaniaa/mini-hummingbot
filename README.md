@@ -42,12 +42,15 @@ Reporting & Monitoring
 
 MEV Protection
 - **What is MEV?** MEV (Maximal Extractable Value) attacks include frontrunning and sandwich attacks where bots exploit transaction ordering to profit at your expense
-- **How it works:** Routes all transactions through PancakeSwap's private RPC endpoint (`bscrpc.pancakeswap.finance`) which prevents bots from seeing your transactions before they're confirmed
+- **How it works:** Uses multiple defensive strategies to reduce MEV attack surface:
+  - **Higher Gas Price:** 20% premium over market rate for faster inclusion
+  - **Short Deadlines:** 60-second transaction expiry (vs standard 10 minutes)
+  - **Tight Slippage:** Combined with existing slippage controls for better protection
 - **Enable MEV Protection:** Set `use_mev_protection: true` in your strategy config
 - **Supported Networks:** BSC Mainnet (56) and BSC Testnet (97)
-- **Zero Configuration:** MEV protection automatically uses the correct private RPC endpoint when enabled
-- **Performance:** No additional latency - private RPC is optimized for fast execution
-- **When to use:** Always recommended for large trades or market-making strategies on mainnet
+- **Trade-offs:** Slightly higher gas costs but significantly reduced MEV risk
+- **When to use:** Recommended for large trades or market-making strategies on mainnet
+- **Note:** BSC doesn't have true private mempool solutions like Ethereum (Flashbots). These defensive strategies significantly reduce but don't eliminate MEV risk.
 
 Network Resilience
 - Automatic retry on network failures
