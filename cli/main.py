@@ -280,13 +280,17 @@ def run_dex_simple_swap(ks: Keystore) -> None:
     except ValueError:
         print("Invalid slippage.")
         return
+    # MEV Protection
+    mev_def = "yes" if defaults.get("use_mev_protection", True) else "no"
+    mev_str = prompt(f"Enable MEV protection? (yes/no) [{mev_def}]: ").strip().lower() or mev_def
+    use_mev_protection = mev_str in {"y", "yes"}
     # Confirm
     # Direction summary reflects explicit trade side
     direction = f"{'SELL ' + base + ' for ' + quote if spend_is_base else 'BUY ' + base + ' with ' + quote}"
     print(f"You will {direction} on {len(private_keys)} wallet(s): {base} <-> {quote}, per-wallet amount={amount} ({'base' if amount_basis_is_base else 'quote'}), slippage={sl_bps} bps")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
-        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_basis_is_base, "spend_is_base": spend_is_base, "slippage_bps": sl_bps})
+        _save_defaults("dex_simple_swap", {"chain_id": chain_id, "base": base, "quote": quote, "amount": amount, "amount_is_base": amount_basis_is_base, "spend_is_base": spend_is_base, "slippage_bps": sl_bps, "use_mev_protection": use_mev_protection})
     go = prompt("Proceed? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
         print("Cancelled.")
@@ -307,6 +311,7 @@ def run_dex_simple_swap(ks: Keystore) -> None:
                 amount_basis_is_base=amount_basis_is_base,
                 slippage_bps=sl_bps,
                 label=label,
+                use_mev_protection=use_mev_protection,
             )
             strat = DexSimpleSwap(cfg)
             tx_hash = strat.run()
@@ -437,6 +442,10 @@ def run_dex_batch_swap(ks: Keystore) -> None:
     except ValueError:
         print("Invalid interval/slippage.")
         return
+    # MEV Protection
+    mev_def = "yes" if defaults.get("use_mev_protection", True) else "no"
+    mev_str = prompt(f"Enable MEV protection? (yes/no) [{mev_def}]: ").strip().lower() or mev_def
+    use_mev_protection = mev_str in {"y", "yes"}
     # Confirm
     print(f"Ladder: {num_orders} orders from {min_p} to {max_p}, dist={distribution}, total={total_amount} ({'base' if amount_basis_is_base else 'quote'}), side={'sell' if spend_is_base else 'buy'} across {len(private_keys)} wallet(s)")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
@@ -454,6 +463,7 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             "interval_seconds": interval_sec,
             "slippage_bps": sl_bps,
             "spend_is_base": spend_is_base,
+            "use_mev_protection": use_mev_protection,
         })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
@@ -478,6 +488,7 @@ def run_dex_batch_swap(ks: Keystore) -> None:
             interval_seconds=interval_sec,
             slippage_bps=sl_bps,
             wallet_names=wallet_names,
+            use_mev_protection=use_mev_protection,
         )
         strat = DexBatchSwap(cfg)
         print("Running... Type Ctrl+C to stop.")
@@ -594,6 +605,10 @@ def run_dex_pure_mm(ks: Keystore) -> None:
     except ValueError:
         print("Invalid refresh/interval/slippage.")
         return
+    # MEV Protection
+    mev_def = "yes" if defaults.get("use_mev_protection", True) else "no"
+    mev_str = prompt(f"Enable MEV protection? (yes/no) [{mev_def}]: ").strip().lower() or mev_def
+    use_mev_protection = mev_str in {"y", "yes"}
     print(f"Pure MM: {levels_each_side} lvls each side, steps +{up}%/-{lo}% per level, per-order={order_amount} ({'base' if amount_is_base else 'quote'})")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
@@ -609,6 +624,7 @@ def run_dex_pure_mm(ks: Keystore) -> None:
             "refresh_seconds": refresh_seconds,
             "tick_interval_seconds": tick_interval,
             "slippage_bps": sl_bps,
+            "use_mev_protection": use_mev_protection,
         })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
@@ -630,6 +646,7 @@ def run_dex_pure_mm(ks: Keystore) -> None:
             slippage_bps=sl_bps,
             tick_interval_seconds=tick_interval,
             wallet_names=wallet_names,
+            use_mev_protection=use_mev_protection,
         )
         strat = DexPureMarketMaking(cfg)
         print("Running... Type Ctrl+C to stop.")
@@ -748,6 +765,10 @@ def run_dex_dca(ks: Keystore) -> None:
     except ValueError:
         print("Invalid slippage.")
         return
+    # MEV Protection
+    mev_def = "yes" if defaults.get("use_mev_protection", True) else "no"
+    mev_str = prompt(f"Enable MEV protection? (yes/no) [{mev_def}]: ").strip().lower() or mev_def
+    use_mev_protection = mev_str in {"y", "yes"}
     print(f"DCA: total={total_amount} ({'base' if amount_is_base else 'quote'}), side={'sell' if spend_is_base else 'buy'}, orders={num_orders}, interval={interval_seconds}s, dist={distribution}, wallets={len(private_keys)}")
     use_prev = prompt("Save these as defaults? (yes/no) [yes]: ").strip().lower() or "yes"
     if use_prev in {"y", "yes"}:
@@ -762,6 +783,7 @@ def run_dex_dca(ks: Keystore) -> None:
             "distribution": distribution,
             "slippage_bps": sl_bps,
             "spend_is_base": spend_is_base,
+            "use_mev_protection": use_mev_protection,
         })
     go = prompt("Start now? (yes/no): ").strip().lower()
     if go not in {"y", "yes"}:
@@ -783,6 +805,7 @@ def run_dex_dca(ks: Keystore) -> None:
             distribution=distribution,
             slippage_bps=sl_bps,
             wallet_names=wallet_names,
+            use_mev_protection=use_mev_protection,
         )
         strat = DexDCA(cfg)
         print("Running... Type Ctrl+C to stop.")
