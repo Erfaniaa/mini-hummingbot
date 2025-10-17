@@ -49,10 +49,14 @@ def _compute_distribution_weights(n: int, kind: str) -> List[float]:
         w = math.exp(-0.5 * ((i - center) / sigma) ** 2)
         weights.append(w)
     s = sum(weights)
+    if s == 0:  # Safety check (should never happen with Gaussian)
+        return [1.0 / n] * n
     return [w / s for w in weights]
 
 
 def _generate_levels(min_price: float, max_price: float, num_orders: int) -> List[float]:
+    if num_orders <= 0:
+        return []
     if num_orders == 1:
         return [min_price]
     step = (max_price - min_price) / float(num_orders - 1)

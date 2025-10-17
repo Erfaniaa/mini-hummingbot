@@ -1016,33 +1016,21 @@ class PancakeSwapConnector(ExchangeConnector):
         amount_out_wei = self.client.to_wei(token_out, self.quantize_amount(token_out_symbol, float(target_out_amount)))
         required_in = self.quote_best_in_for_exact_out(token_in_symbol, token_out_symbol, int(amount_out_wei))
         if required_in <= 0:
-            # Fallback: estimate via side-aware price and pad by slippage
+            # Fallback: estimate via regular price (simpler and more reliable)
             try:
-                side = "sell" if token_in_symbol.upper() == token_in_symbol.upper() and token_in_symbol.upper() == token_in_symbol.upper() else "sell"
-                # for exact-out: if token_in is base -> sell, else buy
-                base_sym = token_in_symbol if token_in_symbol.upper() == token_in_symbol.upper() and token_in_symbol.upper() != token_out_symbol.upper() else token_out_symbol
-                # simpler: decide based on symbols passed to method
-            except Exception:
-                pass
-            # decide spend side by comparing against symbols
-            spend_is_base = (token_in_symbol.upper() == token_out_symbol.upper()) is False and (token_in_symbol.upper() == token_in_symbol.upper())
-            # Use get_price_side for an estimate
-            try:
-                if spend_is_base:
-                    qpb = self.get_price_side(token_in_symbol, token_out_symbol, side="sell", fast=True)
-                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) / float(qpb)
-                else:
-                    qpb = self.get_price_side(token_out_symbol, token_in_symbol, side="buy", fast=True)
-                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) * float(qpb)
-            except Exception:
-                # final fallback, try full price
-                if spend_is_base:
-                    qpb = self.get_price(token_in_symbol, token_out_symbol)
-                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) / float(qpb)
-                else:
-                    qpb = self.get_price(token_out_symbol, token_in_symbol)
-                    est_in = float(amount_out_wei) / (10 ** self.client.get_decimals(self._resolve(token_out_symbol))) * float(qpb)
-            required_in = self.client.to_wei(self._resolve(token_in_symbol), self.quantize_amount(token_in_symbol, float(est_in)))
+                # Get price and calculate estimated input
+                qpb = self.get_price(token_in_symbol, token_out_symbol)
+                if qpb <= 0:
+                    raise RuntimeError(f"Cannot get valid price for {token_in_symbol}/{token_out_symbol}")
+                
+                # Convert output amount to human units and calculate input
+                amount_out_human = self.client.from_wei(token_out, int(amount_out_wei))
+                est_in_human = amount_out_human / float(qpb)
+                
+                # Convert back to wei
+                required_in = self.client.to_wei(token_in, self.quantize_amount(token_in_symbol, float(est_in_human)))
+            except Exception as e:
+                raise RuntimeError(f"Cannot estimate input for exact-output swap: {e}")
         amount_in_max = int(required_in) * (10_000 + int(slippage_bps) + 50) // 10_000
         # Ensure allowance to v3 router (for v3 exactOutputSingle), and to v2 router (for v2 fallback)
         try:

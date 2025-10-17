@@ -254,10 +254,16 @@ class DexPureMarketMaking:
             print(f"\n[dex_pmm] === Price Levels Refreshed (Mid: {px:.8f}) ===")
             print(f"[dex_pmm] Upper levels (SELL {self.cfg.base_symbol}):")
             for i, lvl in enumerate(sorted(self.upper_levels), 1):
-                print(f"[dex_pmm]   #{i}: {lvl:.8f} (+{((lvl - px) / px * 100):.2f}%)")
+                if px > 0:
+                    print(f"[dex_pmm]   #{i}: {lvl:.8f} (+{((lvl - px) / px * 100):.2f}%)")
+                else:
+                    print(f"[dex_pmm]   #{i}: {lvl:.8f}")
             print(f"[dex_pmm] Lower levels (BUY {self.cfg.base_symbol}):")
             for i, lvl in enumerate(sorted(self.lower_levels, reverse=True), 1):
-                print(f"[dex_pmm]   #{i}: {lvl:.8f} ({((lvl - px) / px * 100):.2f}%)")
+                if px > 0:
+                    print(f"[dex_pmm]   #{i}: {lvl:.8f} ({((lvl - px) / px * 100):.2f}%)")
+                else:
+                    print(f"[dex_pmm]   #{i}: {lvl:.8f}")
             print()
 
         # Check price levels and execute orders

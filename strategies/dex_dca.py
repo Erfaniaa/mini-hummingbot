@@ -89,6 +89,8 @@ class DexDCA:
     def _pick_chunk(self) -> float:
         if self.orders_left <= 1:
             return max(0.0, self.remaining)
+        if self.orders_left <= 0:  # Extra safety check
+            return 0.0
         if self.cfg.distribution == "random_uniform":
             mean = self.remaining / self.orders_left
             chunk = random.uniform(0.5 * mean, 1.5 * mean)
