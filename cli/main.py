@@ -7,13 +7,15 @@ import threading
 import time
 
 from core.keystore import Keystore
-from core.token_registry import TokenRegistry
 from core.settings_store import SettingsStore
 from strategies.dex_simple_swap import DexSimpleSwap, DexSimpleSwapConfig
 from strategies.dex_batch_swap import DexBatchSwap, DexBatchSwapConfig
 from strategies.dex_pure_market_making import DexPureMarketMaking, DexPureMMConfig
 from strategies.dex_dca import DexDCA, DexDCAConfig
-from connectors.dex.pancakeswap import PancakeSwapConnector
+
+# Import CLI modules
+from cli.utils import prompt, input_float
+from cli.menus import menu_wallets, menu_token_approvals, menu_telegram_setup
 
 
 KEYSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "keystore", "keystore.json"))
@@ -21,11 +23,17 @@ SETTINGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "se
 SETTINGS = SettingsStore(SETTINGS_DIR)
 
 
-def prompt(prompt_text: str) -> str:
+def _load_defaults(name: str) -> dict:
+    """Load strategy defaults from settings."""
+    return SETTINGS.load(name) or {}
+
+
+def _save_defaults(name: str, data: dict) -> None:
+    """Save strategy defaults to settings."""
     try:
-        return input(prompt_text)
-    except EOFError:
-        return ""
+        SETTINGS.save(name, data)
+    except Exception:
+        pass
 
 
 def ensure_keystore() -> Keystore:
@@ -65,140 +73,6 @@ def ensure_keystore() -> Keystore:
         ks.initialize(pw1)
         print("Keystore recreated.")
         return ks
-
-
-def menu_wallets(ks: Keystore) -> None:
-    while True:
-        print("\nWallets:")
-        print("  1) List wallets")
-        print("  2) Add wallet")
-        print("  3) Remove wallet")
-        print("  0) Back")
-        choice = prompt("Select: ")
-        if choice == "1":
-            try:
-                ks.load()
-                wallets = ks.list_wallets()
-                if not wallets:
-                    print("No wallets saved.")
-                else:
-                    for w in wallets:
-                        print(f"- {w.name} ({w.address})")
-            except Exception as e:
-                print(f"Error: {e}")
-        elif choice == "2":
-            name = prompt("Enter wallet name: ").strip()
-            if not name:
-                print("Name is required.")
-                continue
-            priv = getpass.getpass("Paste private key (with or without 0x): ").strip()
-            if not priv:
-                print("Private key is required.")
-                continue
-            pw = getpass.getpass("Keystore passphrase: ")
-            try:
-                ks.load()
-                rec = ks.add_wallet(name=name, private_key=priv, password=pw)
-                print(f"Added wallet '{rec.name}' with address {rec.address}")
-            except Exception as e:
-                print(f"Error: {e}")
-        elif choice == "3":
-            name = prompt("Enter wallet name to remove: ")
-            try:
-                ks.load()
-                ok = ks.remove_wallet(name)
-                print("Removed." if ok else "No such wallet.")
-            except Exception as e:
-                print(f"Error: {e}")
-        elif choice == "0":
-            return
-        else:
-            print("Invalid selection.")
-
-
-def menu_token_approvals(ks: Keystore) -> None:
-    print("\nToken Approvals - Approve router to spend tokens on PancakeSwap")
-    chain_str = prompt("Chain (56 mainnet / 97 testnet) [56]: ").strip() or "56"
-    try:
-        chain_id = int(chain_str)
-    except ValueError:
-        print("Invalid chain id.")
-        return
-    rpc_url = "https://bsc-dataseed.binance.org/" if chain_id == 56 else "https://bsc-testnet.publicnode.com"
-    ks.load()
-    wallets = ks.list_wallets()
-    if not wallets:
-        print("No wallets saved.")
-        return
-    print("Select wallet:")
-    for i, w in enumerate(wallets, start=1):
-        print(f"  {i}) {w.name} ({w.address[:10]}...)")
-    idx_str = prompt("Enter number: ").strip()
-    try:
-        idx = int(idx_str)
-        if idx < 1 or idx > len(wallets):
-            raise ValueError
-    except ValueError:
-        print("Invalid selection.")
-        return
-    w = wallets[idx - 1]
-    pw = getpass.getpass("Keystore passphrase: ")
-    try:
-        pk = ks.get_private_key(w.name, pw)
-    except Exception as e:
-        print(f"Error unlocking wallet: {e}")
-        return
-    symbol = prompt("Token symbol to approve (BTCB or USDT): ").strip().upper()
-    if not symbol:
-        print("Symbol required.")
-        return
-    conn = PancakeSwapConnector(rpc_url=rpc_url, private_key=pk, chain_id=chain_id)
-    print("1) Approve unlimited  2) Approve specific amount  3) Check allowance  0) Back")
-    sel = prompt("Select: ").strip()
-    try:
-        if sel == "1":
-            tx = conn.approve_unlimited(symbol)
-            url = ("https://bscscan.com/tx/" if chain_id == 56 else "https://testnet.bscscan.com/tx/") + tx
-            print("Approve submitted:", tx)
-            print("Explorer:", url)
-        elif sel == "2":
-            amt = input_float("Amount to approve: ")
-            if amt is None or amt <= 0:
-                print("Invalid amount.")
-                return
-            tx = conn.approve(symbol, float(amt))
-            url = ("https://bscscan.com/tx/" if chain_id == 56 else "https://testnet.bscscan.com/tx/") + tx
-            print("Approve submitted:", tx)
-            print("Explorer:", url)
-        elif sel == "3":
-            alw = conn.get_allowance(symbol)
-            print(f"Allowance (wei-like units): {alw}")
-        else:
-            return
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-def input_float(prompt_text: str) -> Optional[float]:
-    val = prompt(prompt_text).strip()
-    try:
-        if val == "":
-            return None
-        return float(val)
-    except ValueError:
-        print("Invalid number.")
-        return None
-
-
-def _load_defaults(name: str) -> dict:
-    return SETTINGS.load(name) or {}
-
-
-def _save_defaults(name: str, data: dict) -> None:
-    try:
-        SETTINGS.save(name, data)
-    except Exception:
-        pass
 
 
 def run_dex_simple_swap(ks: Keystore) -> None:
@@ -818,101 +692,6 @@ def run_dex_dca(ks: Keystore) -> None:
             strat.stop()
     except Exception as e:
         print(f"Error: {e}")
-
-
-def menu_telegram_setup() -> None:
-    """Setup Telegram notifications."""
-    from core.telegram_notifier import TelegramConfig, TelegramNotifier
-    
-    print("\nTelegram Notifications Setup")
-    print("\nHow to get Bot Token and Chat ID:")
-    print("  1. Open Telegram and search for @BotFather")
-    print("  2. Send /newbot and follow instructions to create a bot")
-    print("  3. Copy the Bot Token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)")
-    print("  4. Start a chat with your bot and send any message")
-    print("  5. Visit: https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates")
-    print("  6. Look for 'chat':{'id': 123456789} and copy the Chat ID")
-    print("\nCurrent Configuration:")
-    
-    config = TelegramNotifier.load_config()
-    if config:
-        print(f"  Bot Token: {'*' * 20}{config.bot_token[-10:] if len(config.bot_token) > 10 else '***'}")
-        print(f"  Chat ID: {config.chat_id}")
-        print(f"  Enabled: {'Yes' if config.enabled else 'No'}")
-        print(f"  Batch Interval: {config.batch_interval}s")
-    else:
-        print("  Not configured yet")
-    
-    print("\nOptions:")
-    print("  1) Configure Bot Token and Chat ID")
-    print("  2) Enable/Disable notifications")
-    print("  3) Test notification")
-    print("  4) Advanced settings")
-    print("  0) Back")
-    
-    choice = prompt("Select: ").strip()
-    
-    if choice == "1":
-        token = prompt("Enter Bot Token: ").strip()
-        if not token:
-            print("Token is required.")
-            return
-        chat_id = prompt("Enter Chat ID: ").strip()
-        if not chat_id:
-            print("Chat ID is required.")
-            return
-        
-        new_config = TelegramConfig(
-            bot_token=token,
-            chat_id=chat_id,
-            enabled=True
-        )
-        TelegramNotifier.save_config(new_config)
-        print("✓ Telegram configuration saved!")
-        
-    elif choice == "2":
-        if not config:
-            print("Please configure Telegram first (option 1)")
-            return
-        enabled_str = prompt("Enable notifications? (yes/no): ").strip().lower()
-        config.enabled = enabled_str in {"yes", "y"}
-        TelegramNotifier.save_config(config)
-        print(f"✓ Notifications {'enabled' if config.enabled else 'disabled'}")
-        
-    elif choice == "3":
-        if not config or not config.enabled:
-            print("Telegram is not configured or disabled")
-            return
-        print("Sending test notification...")
-        try:
-            notifier = TelegramNotifier(config)
-            notifier.notify_success("✅ Test notification from Mini-Hummingbot!")
-            notifier.flush()
-            notifier.stop()
-            print("✓ Test notification sent! Check your Telegram.")
-        except Exception as e:
-            print(f"✗ Failed to send: {e}")
-            
-    elif choice == "4":
-        if not config:
-            print("Please configure Telegram first (option 1)")
-            return
-        batch_str = prompt(f"Batch interval seconds [{config.batch_interval}]: ").strip()
-        if batch_str:
-            try:
-                config.batch_interval = float(batch_str)
-            except ValueError:
-                print("Invalid number")
-                return
-        max_batch_str = prompt(f"Max batch size [{config.max_batch_size}]: ").strip()
-        if max_batch_str:
-            try:
-                config.max_batch_size = int(max_batch_str)
-            except ValueError:
-                print("Invalid number")
-                return
-        TelegramNotifier.save_config(config)
-        print("✓ Advanced settings saved!")
 
 
 def main() -> None:
