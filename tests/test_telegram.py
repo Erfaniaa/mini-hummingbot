@@ -70,8 +70,7 @@ def test_telegram_notifier_disabled():
     notifier.stop()
 
 
-@pytest.mark.skip(reason="Telegram Bot patching is complex - test real integration separately")
-@patch('core.telegram_notifier.Bot')
+@patch('telegram.Bot')
 def test_telegram_notifier_batching(mock_bot_class):
     """Test message batching."""
     mock_bot = MagicMock()
@@ -92,7 +91,7 @@ def test_telegram_notifier_batching(mock_bot_class):
     notifier.notify_info("Message 2")
     
     # Should not send yet
-    assert len(notifier._message_queue) == 2
+    assert notifier._message_queue.qsize() == 2
     
     # Add 3rd message (reaches batch size)
     notifier.notify_info("Message 3")
@@ -105,8 +104,7 @@ def test_telegram_notifier_batching(mock_bot_class):
     assert mock_bot.send_message.called
 
 
-@pytest.mark.skip(reason="Telegram Bot patching is complex - test real integration separately")
-@patch('core.telegram_notifier.Bot')
+@patch('telegram.Bot')
 def test_telegram_notifier_message_types(mock_bot_class):
     """Test different message types."""
     mock_bot = MagicMock()
@@ -123,9 +121,9 @@ def test_telegram_notifier_message_types(mock_bot_class):
     notifier.notify_info("ℹ️ Info message")
     notifier.notify_success("✅ Success message")
     notifier.notify_warning("⚠️ Warning message")
-    notifier.notify_error("❌ Error message")
+    notifier.notify_critical("🔴 Critical message")
     
-    assert len(notifier._message_queue) == 4
+    assert notifier._message_queue.qsize() == 4
     
     notifier.flush()
     notifier.stop()
@@ -168,8 +166,7 @@ def test_telegram_config_save_load():
         assert loaded_config.max_batch_size == config.max_batch_size
 
 
-@pytest.mark.skip(reason="Telegram Bot patching is complex - test real integration separately")
-@patch('core.telegram_notifier.Bot')
+@patch('telegram.Bot')
 def test_telegram_notifier_network_error_handling(mock_bot_class):
     """Test network error handling."""
     mock_bot = MagicMock()
@@ -185,7 +182,7 @@ def test_telegram_notifier_network_error_handling(mock_bot_class):
     notifier = TelegramNotifier(config)
     
     # Should not raise exception
-    notifier.notify_error("Test message")
+    notifier.notify_critical("Test message")
     notifier.flush()
     notifier.stop()
 
@@ -209,8 +206,7 @@ def test_telegram_notifier_empty_message():
     notifier.stop()
 
 
-@pytest.mark.skip(reason="Telegram Bot patching is complex - test real integration separately")
-@patch('core.telegram_notifier.Bot')
+@patch('telegram.Bot')
 def test_telegram_notifier_long_message_truncation(mock_bot_class):
     """Test long message truncation."""
     mock_bot = MagicMock()

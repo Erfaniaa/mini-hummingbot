@@ -56,6 +56,11 @@ Reporting & Monitoring
 - Final comprehensive reports per wallet and aggregate
 - Success/failure statistics for all orders
 - Connection health monitoring
+- **Telegram notifications** for critical events (optional):
+  - Strategy start/stop
+  - Order fills and failures
+  - Balance updates
+  - Configure via CLI menu or `telegram_config.json`
 
 MEV Protection
 - **What is MEV?** MEV (Maximal Extractable Value) is the profit that can be extracted by manipulating transaction ordering in a block. Common MEV attacks include:
