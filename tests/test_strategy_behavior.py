@@ -54,7 +54,19 @@ class FakeConnector:
         else:
             return 1.0 / self.get_price(base_symbol, quote_symbol) if self.get_price(base_symbol, quote_symbol) > 0 else 0.0
     
-    def market_swap(self, token_in: str, token_out: str, amount_in: float, slippage_bps: int = 50) -> str:
+    def market_swap(self, base_symbol: str, quote_symbol: str, amount: float, amount_is_base: bool, slippage_bps: int = 50, side: str = None) -> str:
+        """Market swap matching real connector signature."""
+        if side == "sell" or (side is None and amount_is_base):
+            # Selling base for quote
+            token_in = base_symbol
+            token_out = quote_symbol
+            amount_in = amount
+        else:
+            # Buying base with quote
+            token_in = quote_symbol
+            token_out = base_symbol
+            amount_in = amount
+        
         self.balances[token_in] = max(0.0, self.balances.get(token_in, 0.0) - amount_in)
         amount_out = amount_in * self.get_price(token_in, token_out)
         self.balances[token_out] = self.balances.get(token_out, 0.0) + amount_out
@@ -63,15 +75,28 @@ class FakeConnector:
             "token_out": token_out,
             "amount_in": amount_in,
             "amount_out": amount_out,
-            "slippage_bps": slippage_bps
+            "slippage_bps": slippage_bps,
+            "side": side
         }
         self.swaps.append(swap)
         return f"0xfake_tx_{len(self.swaps)}"
     
-    def swap_exact_out(self, token_in: str, token_out: str, amount_out: float, slippage_bps: int = 50) -> str:
-        price = self.get_price(token_in, token_out)
-        amount_in = amount_out / price if price > 0 else 0.0
-        return self.market_swap(token_in, token_out, amount_in, slippage_bps)
+    def swap_exact_out(self, token_in_symbol: str, token_out_symbol: str, target_out_amount: float, slippage_bps: int = 50) -> str:
+        """Exact output swap - receive exact amount of output token."""
+        price = self.get_price(token_in_symbol, token_out_symbol)
+        amount_in = target_out_amount / price if price > 0 else 0.0
+        
+        # Determine if this is a buy or sell based on token direction
+        is_base_out = (token_out_symbol == "BASE")
+        
+        return self.market_swap(
+            base_symbol="BASE",
+            quote_symbol="QUOTE", 
+            amount=amount_in if not is_base_out else target_out_amount,
+            amount_is_base=not is_base_out,
+            slippage_bps=slippage_bps,
+            side="buy" if is_base_out else "sell"
+        )
     
     def quantize_amount(self, symbol: str, amount: float) -> float:
         return round(amount, 8)
@@ -82,9 +107,8 @@ class FakeConnector:
     def get_allowance(self, symbol: str) -> int:
         return 999999999999999999999999
     
-    @property
-    def tx_explorer_url(self) -> str:
-        return "https://bscscan.com/tx/"
+    def tx_explorer_url(self, tx_hash: str) -> str:
+        return f"https://bscscan.com/tx/{tx_hash}"
 
 
 def test_simple_swap_exact_behavior():
