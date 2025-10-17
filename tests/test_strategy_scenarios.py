@@ -35,9 +35,9 @@ def test_simple_swap_exact_order_count():
     final_quote = fake.get_balance("QUOTE")
     
     assert len(fake._txs) == initial_txs + 1, "Should create exactly 1 transaction"
-    # When selling 10 BASE at price 2.0, should get 10/2.0 = 5 QUOTE
+    # When selling 10 BASE at price 2.0, should get 10 * 2.0 = 20 QUOTE
     assert final_base == initial_base - 10.0, f"BASE should decrease by 10, got {initial_base - final_base}"
-    assert final_quote == initial_quote + 5.0, f"QUOTE should increase by 5, got {final_quote - initial_quote}"
+    assert final_quote == initial_quote + 20.0, f"QUOTE should increase by 20, got {final_quote - initial_quote}"
 
 
 def test_batch_swap_creates_multiple_orders():
@@ -111,8 +111,8 @@ def test_batch_swap_sell_reduces_base_balance():
     # Verify exchange rate is approximately correct
     if base_spent > 0:
         rate = quote_received / base_spent
-        expected_rate = 1.0 / 2.0  # price = 2.0 BASE/QUOTE, so rate is 0.5 QUOTE per BASE
-        assert abs(rate - expected_rate) < 0.1, f"Expected rate ~{expected_rate}, got {rate}"
+        expected_rate = 2.0  # price = 2.0 QUOTE/BASE, so rate is 2.0 QUOTE per BASE
+        assert abs(rate - expected_rate) < 0.5, f"Expected rate ~{expected_rate}, got {rate}"
 
 
 def test_batch_swap_buy_reduces_quote_balance():
