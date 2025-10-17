@@ -41,7 +41,10 @@ Reporting & Monitoring
 - Connection health monitoring
 
 MEV Protection
-- **What is MEV?** MEV (Maximal Extractable Value) attacks include frontrunning and sandwich attacks where bots exploit transaction ordering to profit at your expense
+- **What is MEV?** MEV (Maximal Extractable Value) is the profit that can be extracted by manipulating transaction ordering in a block. Common MEV attacks include:
+  - **Frontrunning:** Placing transactions ahead of yours to profit from price changes
+  - **Sandwich attacks:** Placing transactions before and after yours to extract value
+  - **Back-running:** Placing transactions immediately after yours to exploit state changes
 - **How it works:** Uses multiple defensive strategies to reduce MEV attack surface:
   - **Higher Gas Price:** 20% premium over market rate for faster inclusion
   - **Short Deadlines:** 60-second transaction expiry (vs standard 10 minutes)

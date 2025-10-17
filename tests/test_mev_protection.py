@@ -1,11 +1,15 @@
 """
 Tests for MEV protection functionality in PancakeSwap connector.
 
-MEV (Maximal Extractable Value) protection reduces frontrunning and sandwich attacks
-by using multiple defensive strategies:
+MEV (Maximal Extractable Value) refers to profit extracted by manipulating
+transaction ordering. This includes frontrunning, sandwich attacks, and back-running.
+
+Our MEV protection uses multiple defensive strategies:
 - Higher gas price (20% premium) for faster inclusion
-- Short transaction deadlines (60s vs 600s)
+- Short transaction deadlines (60s vs 600s) 
 - Tight slippage tolerance
+
+While these don't eliminate MEV risk entirely, they significantly reduce it.
 """
 
 from __future__ import annotations
