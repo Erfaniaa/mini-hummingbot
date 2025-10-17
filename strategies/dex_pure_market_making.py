@@ -71,6 +71,13 @@ class DexPureMarketMaking:
         self._stopped: bool = False
         self._start_time: Optional[float] = None  # Set when strategy starts
         
+        # Track which levels have been executed in current refresh period
+        # Key: (side, level_price), prevents double-trigger before refresh
+        self._executed_levels: set = set()
+        
+        # Track if order submission is in progress (to prevent race conditions)
+        self._order_in_progress: bool = False
+        
         # Get Telegram notifier if available
         telegram_notifier = get_notifier() if get_notifier else None
         self.telegram_notifier = telegram_notifier
@@ -168,6 +175,10 @@ class DexPureMarketMaking:
             dn.append(lower_level)
         self.upper_levels = up
         self.lower_levels = dn
+        
+        # Reset executed levels tracking on refresh
+        # This allows levels to be triggered again in the new refresh period
+        self._executed_levels.clear()
 
     def _quantize(self, symbol: str, amount: float) -> float:
         qf = getattr(self.connectors[0], "quantize_amount", None)
@@ -182,6 +193,24 @@ class DexPureMarketMaking:
         """Execute market making order using OrderManager."""
         if self._stopped:
             return False
+        
+        # Check if order already in progress (prevent race condition)
+        if self._order_in_progress:
+            return False
+        
+        # Create unique level identifier
+        side_str = "upper" if is_upper else "lower"
+        level_key = (side_str, round(level, 8))  # Round to avoid floating point issues
+        
+        # Check if this level was already executed in current refresh period
+        if level_key in self._executed_levels:
+            return False
+        
+        # Mark this level as executed immediately to prevent double-trigger
+        self._executed_levels.add(level_key)
+        
+        # Set order in progress flag
+        self._order_in_progress = True
         
         basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
         spend_is_base = is_upper  # upper level = sell base, lower level = buy base
@@ -250,6 +279,9 @@ class DexPureMarketMaking:
                 order_mgr.mark_filled(order)
             else:
                 all_success = False
+        
+        # Clear order in progress flag
+        self._order_in_progress = False
         
         return all_success
 

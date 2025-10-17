@@ -67,6 +67,9 @@ class DexDCA:
         self._stopped: bool = False
         self._start_time: Optional[float] = None  # Set when strategy starts
         
+        # Track if order submission is in progress (to prevent race conditions)
+        self._order_in_progress: bool = False
+        
         # Get Telegram notifier if available
         telegram_notifier = get_notifier() if get_notifier else None
         self.telegram_notifier = telegram_notifier
@@ -138,6 +141,9 @@ class DexDCA:
         if self._stopped:
             return False
         
+        # Set order in progress flag
+        self._order_in_progress = True
+        
         basis_is_base = self.cfg.amount_basis_is_base if self.cfg.amount_basis_is_base is not None else self.cfg.amount_is_base
         spend_is_base = self.cfg.spend_is_base if self.cfg.spend_is_base is not None else self.cfg.amount_is_base
         side = "sell" if spend_is_base else "buy"
@@ -205,6 +211,9 @@ class DexDCA:
                 order_mgr.mark_filled(order)
             else:
                 all_success = False
+        
+        # Clear order in progress flag
+        self._order_in_progress = False
         
         return all_success
 
@@ -274,6 +283,10 @@ class DexDCA:
         self._connection_monitor.record_success()
         
         if not px or px <= 0:
+            return
+        
+        # Check if order already in progress (prevent race condition)
+        if self._order_in_progress:
             return
         
         # Execute DCA order
