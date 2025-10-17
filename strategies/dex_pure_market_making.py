@@ -30,7 +30,7 @@ class DexPureMMConfig:
     slippage_bps: int = 50
     tick_interval_seconds: float = 1.0
     wallet_names: Optional[List[str]] = None  # optional wallet names for logging
-    # MEV protection: use PancakeSwap private RPC to prevent frontrunning/sandwich attacks
+    # MEV protection: custom defensive strategies (higher gas, shorter deadlines)
     use_mev_protection: bool = False
 
 

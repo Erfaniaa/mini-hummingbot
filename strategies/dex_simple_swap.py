@@ -26,7 +26,7 @@ class DexSimpleSwapConfig:
     amount_basis_is_base: Optional[bool] = None
     # Optional label for logging (e.g., wallet name)
     label: Optional[str] = None
-    # MEV protection: use PancakeSwap private RPC to prevent frontrunning/sandwich attacks
+    # MEV protection: custom defensive strategies (higher gas, shorter deadlines)
     use_mev_protection: bool = False
 
 

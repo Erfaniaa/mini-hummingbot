@@ -42,13 +42,15 @@ class QuoteV3:
 
 
 class PancakeSwapClient:
-    # MEV Protection: Strategies to reduce MEV (Maximal Extractable Value) attack surface
-    # MEV includes frontrunning, sandwich attacks, and other transaction ordering exploits
-    # Note: True private mempool solutions for BSC are limited
-    # We use multiple defensive strategies instead:
-    # 1. Higher gas price for faster inclusion (reduces frontrunning window)
-    # 2. Tight slippage tolerance (limits sandwich attack profitability)
-    # 3. Short transaction deadlines (prevents delayed execution attacks)
+    # MEV Protection: Custom defensive strategies to reduce MEV attack surface
+    # MEV (Maximal Extractable Value) includes frontrunning, sandwich attacks, etc.
+    # 
+    # Our implementation uses multiple defensive techniques:
+    # 1. Higher gas price (20% premium) for faster inclusion
+    # 2. Tight slippage tolerance (limits sandwich profitability)
+    # 3. Short deadlines (60s) to prevent delayed execution
+    #
+    # Note: BSC lacks true private mempool solutions like Ethereum's Flashbots
     
     ERC20_ABI: List[Dict] = [
         {"constant": True, "inputs": [{"name": "", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
