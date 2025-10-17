@@ -17,11 +17,15 @@ class FakeWeb3Client:
 
 
 class FakeConnector:
-    """Fake connector for testing without blockchain."""
+    """Fake connector for testing without blockchain.
+    
+    Convention: self.price is quote_per_base (e.g., USDT per BNB)
+    Example: price=2.0 means 1 BASE = 2 QUOTE
+    """
     
     def __init__(self, balances=None, price=1.0):
         self.balances = balances or {"BASE": 1000.0, "QUOTE": 1000.0}
-        self.price = price
+        self.price = price  # quote_per_base
         self.swaps = []
         self.chain_id = 56
         self.wallet_address = "0x1234567890123456789012345678901234567890"
