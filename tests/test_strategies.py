@@ -139,10 +139,10 @@ class FakeConnector:
         return 10**36  # Very large number in wei to simulate unlimited approval
 
     def swap_exact_out(self, token_in_symbol, token_out_symbol, target_out_amount, 
-                      max_in_amount, slippage_bps=50, **kwargs):
+                      slippage_bps=50, **kwargs):
         """
         Execute exact-output swap (specify exact output, variable input).
-        Compatible with actual connector signature.
+        Matches actual connector signature: no max_in_amount parameter.
         """
         tx = f"0xswap_exact_out{len(self._txs)}"
         self._txs.append(tx)
