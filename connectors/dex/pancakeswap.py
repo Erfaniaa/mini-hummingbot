@@ -405,7 +405,9 @@ class PancakeSwapClient:
         return self._account
 
     def _default_tx_params(self, gas_price_gwei: Optional[int] = None, gas_limit: Optional[int] = None) -> Dict:
-        params = {"chainId": self.chain_id, "from": self.address, "nonce": self.web3.eth.get_transaction_count(self.address)}
+        # Use 'pending' to include pending transactions in nonce calculation
+        # This prevents "nonce too low" errors when multiple transactions are sent quickly
+        params = {"chainId": self.chain_id, "from": self.address, "nonce": self.web3.eth.get_transaction_count(self.address, 'pending')}
         
         # MEV Protection: Use higher gas price for faster inclusion
         if hasattr(self, 'use_mev_protection') and self.use_mev_protection:
