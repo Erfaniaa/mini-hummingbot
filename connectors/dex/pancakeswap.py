@@ -42,6 +42,12 @@ class QuoteV3:
 
 
 class PancakeSwapClient:
+    # MEV Protection: PancakeSwap private RPC endpoints
+    MEV_PROTECTED_RPC = {
+        56: "https://bscrpc.pancakeswap.finance",  # BSC Mainnet
+        97: "https://bsc-testnet-rpc.publicnode.com",  # BSC Testnet (fallback, no official private RPC)
+    }
+    
     ERC20_ABI: List[Dict] = [
         {"constant": True, "inputs": [{"name": "", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
         {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "", "type": "uint8"}], "stateMutability": "view", "type": "function"},
@@ -278,7 +284,12 @@ class PancakeSwapClient:
         },
     }
 
-    def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None) -> None:
+    def __init__(self, rpc_url: str, private_key: Optional[str] = None, chain_id: int = 56, v3_swap_router_address: Optional[str] = None, v3_quoter_address: Optional[str] = None, use_mev_protection: bool = False) -> None:
+        # Apply MEV protection if requested
+        if use_mev_protection and chain_id in self.MEV_PROTECTED_RPC:
+            rpc_url = self.MEV_PROTECTED_RPC[chain_id]
+            print(f"[MEV Protection] Using private RPC endpoint for chain {chain_id}")
+        
         # Add request timeout to avoid indefinite hangs on slow/unresponsive RPCs
         self.web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
         # Inject POA middleware for BSC-like chains (handles 280-byte extraData)
@@ -497,11 +508,13 @@ class PancakeSwapConnector(ExchangeConnector):
         network: str = "mainnet",
         default_fee_tier: int = 2500,
         client: Optional[PancakeSwapClient] = None,
+        use_mev_protection: bool = False,
     ) -> None:
         self.registry = TokenRegistry("testnet" if chain_id == 97 else network)
-        self.client = client or PancakeSwapClient(rpc_url=rpc_url, private_key=private_key, chain_id=chain_id)
+        self.client = client or PancakeSwapClient(rpc_url=rpc_url, private_key=private_key, chain_id=chain_id, use_mev_protection=use_mev_protection)
         self.chain_id = chain_id
         self.default_fee_tier = default_fee_tier
+        self.use_mev_protection = use_mev_protection
 
     def _resolve(self, symbol: str) -> str:
         return self.registry.get(symbol).address
