@@ -244,7 +244,9 @@ class DexBatchSwap:
             if success:
                 order_mgr.mark_filled(order)
         
-        # Mark level as done
+        # Mark level as done and clear remaining
+        # Note: Level is marked done even if some wallets failed
+        # This prevents infinite retries on permanently insufficient balance
         self.done[li] = True
         self.remaining[li] = 0.0
 
