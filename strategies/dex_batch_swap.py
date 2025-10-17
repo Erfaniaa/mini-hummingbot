@@ -291,17 +291,27 @@ class DexBatchSwap:
         
         price, method = price_info
         
-        # Try to execute each level independently - failure of one doesn't stop others
+        # Identify which levels would trigger at current price
+        triggered_levels = []
         for i, (lvl, amt, done) in enumerate(zip(self.levels, self.remaining, self.done)):
             if done or amt <= 0:
                 continue
             if self._should_execute(price, lvl):
-                try:
-                    self._execute_level(i, amt, price)
-                except Exception as e:
-                    # Log error but continue with other levels
-                    print(f"[dex_batch_swap] Error executing level {i}: {e}")
-                    print(f"[dex_batch_swap] Strategy continues with remaining levels...")
+                triggered_levels.append((i, lvl, amt))
+        
+        # Warn if multiple levels triggered simultaneously (potential balance issue)
+        if len(triggered_levels) > 1:
+            print(f"[dex_batch_swap] ⚠ Warning: {len(triggered_levels)} levels triggered simultaneously")
+            print(f"[dex_batch_swap] Ensure sufficient balance for all pending orders")
+        
+        # Try to execute each triggered level independently
+        for i, lvl, amt in triggered_levels:
+            try:
+                self._execute_level(i, amt, price)
+            except Exception as e:
+                # Log error but continue with other levels
+                print(f"[dex_batch_swap] Error executing level {i+1}/{len(self.levels)}: {e}")
+                print(f"[dex_batch_swap] Strategy continues with remaining levels...")
 
         # Periodic status logging (every 10 ticks to reduce spam)
         if self._tick_counter % 10 == 0:
