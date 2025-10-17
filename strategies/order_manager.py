@@ -208,9 +208,11 @@ class OrderManager:
                 self._log_submission(order, attempt)
                 
                 # Execute swap
+                actual_submit_time = time.time()  # Record actual submission time (for successful attempt)
                 tx_hash = submit_fn()
                 
                 # Success
+                order.submit_time = actual_submit_time  # Update to actual successful submission time
                 order.tx_hash = tx_hash
                 # Handle both string URL and callable
                 if callable(explorer_url_or_fn):

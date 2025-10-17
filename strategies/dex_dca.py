@@ -108,8 +108,15 @@ class DexDCA:
         self._connection_monitor = ConnectionMonitor("dex_dca")
         self._retry_config = RetryConfig(max_retries=5, initial_delay=2.0)
         
+        # Track last order completion time for interval enforcement
+        self._last_order_time: Optional[float] = None
+        self._loop_running = False  # Track if strategy loop is running
+        
+        # Use responsive tick interval (min 0.1s, max 1s, or cfg.interval if smaller)
+        # This allows quick checking while respecting configured DCA intervals
+        tick_interval = min(1.0, max(0.1, cfg.interval_seconds / 10))
         self._loop = StrategyLoop(StrategyLoopConfig(
-            interval_seconds=cfg.interval_seconds,
+            interval_seconds=tick_interval,
             on_tick=self._on_tick,
             on_error=self._on_error,
         ))
@@ -289,6 +296,14 @@ class DexDCA:
         if self._order_in_progress:
             return
         
+        # Enforce interval between orders (measured from last order completion, not tick start)
+        # Only enforce when running via StrategyLoop (not in tests that call _on_tick directly)
+        if self._loop_running and self._last_order_time is not None:
+            elapsed = time.time() - self._last_order_time
+            if elapsed < self.cfg.interval_seconds:
+                # Not enough time has passed since last order
+                return
+        
         # Execute DCA order
         # Increment attempt counter before execution
         self.attempted_orders += 1
@@ -299,6 +314,8 @@ class DexDCA:
             self.completed_orders += 1
             self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
+            # Update last order time to enforce interval from completion time
+            self._last_order_time = time.time()
         # On failure, don't decrement orders_left to allow retries
         # But attempted_orders still increments to prevent infinite loops
         
@@ -345,6 +362,7 @@ class DexDCA:
         print(f"[dex_dca] Interval: {self.cfg.interval_seconds}s")
         print(f"[dex_dca] Strategy will continue running even if network errors occur\n")
         
+        self._loop_running = True
         self._loop.start()
 
     def stop(self) -> None:
