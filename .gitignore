@@ -16,3 +16,6 @@ keystore/*
 # Settings contents (keep dir with .gitkeep)
 settings/*
 !settings/.gitkeep
+
+# Telegram configuration
+telegram_config.json
