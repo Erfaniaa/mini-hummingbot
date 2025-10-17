@@ -35,6 +35,19 @@ class FakeConnector:
     
     def get_allowance(self, symbol):
         return 10**36  # Unlimited
+    
+    def _resolve(self, symbol):
+        """Resolve token symbol to fake address."""
+        return f"0x{symbol.lower()}"
+    
+    class client:
+        @staticmethod
+        def to_wei(token, amount):
+            return int(amount * 1e18)
+        
+        @staticmethod
+        def from_wei(token, amount):
+            return float(amount) / 1e18
 
     def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50, side=None):
         tx = f"0xswap{len(self._txs)}"
@@ -90,8 +103,8 @@ def run_batch_swap(fake: FakeConnector):
         quote_symbol="QUOTE",
         total_amount=2.0,
         amount_is_base=True,
-        min_price=1.0,
-        max_price=1.0,
+        min_price=0.9,
+        max_price=1.1,
         num_orders=2,
         distribution="uniform",
         interval_seconds=0.01,
