@@ -109,19 +109,11 @@ class TelegramNotifier:
             
             # Telegram has 4096 char limit, split if needed
             if len(combined) > 4000:
+                # Run async send in a new event loop (we're in a thread)
                 # Send first part
-                self._bot.send_message(
-                    chat_id=self.config.chat_id,
-                    text=combined[:4000] + "...",
-                    parse_mode='HTML'
-                )
+                asyncio.run(self._async_send(combined[:4000] + "..."))
                 # Indicate there's more
-                if len(combined) > 4000:
-                    self._bot.send_message(
-                        chat_id=self.config.chat_id,
-                        text=f"... (+{len(combined) - 4000} chars truncated)",
-                        parse_mode='HTML'
-                    )
+                asyncio.run(self._async_send(f"... (+{len(combined) - 4000} chars truncated)"))
             else:
                 # Run async send in a new event loop (we're in a thread)
                 asyncio.run(self._async_send(combined))
