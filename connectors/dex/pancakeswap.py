@@ -54,9 +54,9 @@ class PancakeSwapClient:
     # 1. Higher gas price (20% premium) for faster inclusion and priority
     # 2. Tight slippage tolerance (limits sandwich attack profitability)
     #
-    # Note: We use standard 90s deadline (for ~70s actual swap time + 20s buffer)
-    # Shorter deadlines would cause failures rather than improve MEV protection
-    # Real MEV protection comes from gas premium and slippage, not deadline
+    # Note: We use generous deadlines (120-150s) to accommodate actual swap times
+    # Swaps can take 70-90s in practice, so we need sufficient buffer
+    # Real MEV protection comes from gas premium and slippage, not short deadline
     #
     # BSC lacks true private mempool solutions like Ethereum's Flashbots
     
@@ -303,7 +303,7 @@ class PancakeSwapClient:
             print(f"[MEV Protection] Enabled - Using defensive strategies:")
             print(f"  • Higher gas price (20% premium) for faster inclusion and priority")
             print(f"  • Tight slippage tolerance to limit sandwich attack profitability")
-            print(f"  • Standard 90s deadline (sufficient for ~70s actual swap time)")
+            print(f"  • Generous deadline (120-150s) for reliable execution")
         
         # Add request timeout to avoid indefinite hangs on slow/unresponsive RPCs
         self.web3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
@@ -459,7 +459,8 @@ class PancakeSwapClient:
         # Use 90s deadline for ~70s actual swap time + 20s buffer
         # MEV protection comes from higher gas price (20% premium) and tight slippage
         # Not from shorter deadline (which would cause transaction failures)
-        deadline_duration = 90
+        # Use 150s to accommodate 70-90s actual swap times plus buffer
+        deadline_duration = 150
         deadline = int(time.time()) + deadline_duration
         tx = self._v2_router.functions.swapExactTokensForTokens(int(amount_in), int(min_out), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
         if gas_limit is None:
@@ -476,7 +477,8 @@ class PancakeSwapClient:
         # Use 90s deadline for ~70s actual swap time + 20s buffer
         # MEV protection comes from higher gas price (20% premium) and tight slippage
         # Not from shorter deadline (which would cause transaction failures)
-        deadline_duration = 90
+        # Use 150s to accommodate 70-90s actual swap times plus buffer
+        deadline_duration = 150
         deadline = int(time.time()) + deadline_duration
         tx = self._v2_router.functions.swapTokensForExactTokens(int(amount_out), int(amount_in_max), path, to_addr, int(deadline)).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
         if gas_limit is None:
@@ -505,10 +507,11 @@ class PancakeSwapClient:
         token_out = self.to_checksum(token_out)
         q = self.quote_v3_exact_input_single(token_in, token_out, int(fee), int(amount_in), slippage_bps, sqrt_price_limit_x96)
         to_addr = self.to_checksum(recipient or self.address)
-        # Use standard 90s deadline for reliable execution
+        # Use standard 150s deadline for reliable execution
+        # Swaps can take 70-90s in practice, need sufficient buffer
         # MEV protection comes from gas premium, not shorter deadline
-        if deadline_seconds < 90:
-            deadline_seconds = 90
+        if deadline_seconds < 150:
+            deadline_seconds = 150
         deadline = int(time.time()) + int(deadline_seconds)
         params = (token_in, token_out, int(fee), to_addr, int(deadline), int(amount_in), int(q.min_amount_out), int(sqrt_price_limit_x96))
         tx = self._v3_router.functions.exactInputSingle(params).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
@@ -525,10 +528,11 @@ class PancakeSwapClient:
         path = self._encode_v3_path(checksummed_tokens, fees)
         q = self.quote_v3_exact_input_path(checksummed_tokens, fees, int(amount_in), slippage_bps)
         to_addr = self.to_checksum(recipient or self.address)
-        # Use standard 90s deadline for reliable execution
+        # Use standard 150s deadline for reliable execution
+        # Swaps can take 70-90s in practice, need sufficient buffer
         # MEV protection comes from gas premium, not shorter deadline
-        if deadline_seconds < 90:
-            deadline_seconds = 90
+        if deadline_seconds < 150:
+            deadline_seconds = 150
         deadline = int(time.time()) + int(deadline_seconds)
         params = (path, to_addr, int(deadline), int(amount_in), int(q.min_amount_out))
         tx = self._v3_router.functions.exactInput(params).build_transaction(self._default_tx_params(gas_price_gwei, gas_limit))
@@ -1067,10 +1071,10 @@ class PancakeSwapConnector(ExchangeConnector):
             try:
                 if self.client._v3_router is not None:
                     to_addr = self.client.to_checksum(self.client.address)
-                    # MEV Protection: Use shorter deadline (60s vs 90s default)
-                    # 90s provides buffer for typical 70s swap time + network congestion
-                    # 60s with MEV protection reduces mempool exposure
-                    deadline_duration = 60 if self.use_mev_protection else 90
+                    # MEV Protection: Use adequate deadline for swap execution
+                    # Swaps can take 70-90s in practice, need sufficient buffer
+                    # MEV protection comes from gas premium and tight slippage, not short deadline
+                    deadline_duration = 120 if self.use_mev_protection else 150
                     deadline = int(time.time()) + deadline_duration
                     params = (token_in, token_out, int(fee), to_addr, int(deadline), int(amount_out_wei), int(amount_in_max), 0)
                     tx = self.client._v3_router.functions.exactOutputSingle(params).build_transaction(self.client._default_tx_params())
@@ -1091,10 +1095,10 @@ class PancakeSwapConnector(ExchangeConnector):
                         reversed_fees = list(reversed(list(fees)))
                         path = self.client._encode_v3_path(reversed_path, reversed_fees)
                         to_addr = self.client.to_checksum(self.client.address)
-                        # MEV Protection: Use shorter deadline (60s vs 90s default)
-                        # 90s provides buffer for typical 70s swap time + network congestion
-                        # 60s with MEV protection reduces mempool exposure
-                        deadline_duration = 60 if self.use_mev_protection else 90
+                        # MEV Protection: Use adequate deadline for swap execution
+                        # Swaps can take 70-90s in practice, need sufficient buffer
+                        # MEV protection comes from gas premium and tight slippage, not short deadline
+                        deadline_duration = 120 if self.use_mev_protection else 150
                         deadline = int(time.time()) + deadline_duration
                         params = (path, to_addr, int(deadline), int(amount_out_wei), int(amount_in_max))
                         tx = self.client._v3_router.functions.exactOutput(params).build_transaction(self.client._default_tx_params())
