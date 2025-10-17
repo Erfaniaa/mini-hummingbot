@@ -46,9 +46,9 @@ MEV Protection
   - **Sandwich attacks:** Placing transactions before and after yours to extract value
   - **Back-running:** Placing transactions immediately after yours to exploit state changes
 - **How it works:** Uses multiple defensive strategies to reduce MEV attack surface:
-  - **Higher Gas Price:** 20% premium over market rate for faster inclusion
-  - **Short Deadlines:** 60-second transaction expiry (vs standard 10 minutes)
-  - **Tight Slippage:** Combined with existing slippage controls for better protection
+  - **Higher Gas Price:** 20% premium over market rate for faster inclusion and priority
+  - **Tight Slippage:** Combined with existing slippage controls to limit sandwich attack profitability
+  - **Smart Deadlines:** 90-second timeout (optimized for ~70s actual swap time from real testing)
 - **Enable MEV Protection:** Set `use_mev_protection: true` in your strategy config
 - **Supported Networks:** BSC Mainnet (56) and BSC Testnet (97)
 - **Trade-offs:** Slightly higher gas costs but significantly reduced MEV risk
