@@ -157,8 +157,8 @@ def test_batch_swap_buy_reduces_quote_balance():
     # Verify exchange rate is approximately correct
     if quote_spent > 0:
         rate = base_received / quote_spent
-        expected_rate = 2.0  # price = 2.0 BASE per QUOTE
-        assert abs(rate - expected_rate) < 0.5, f"Expected rate ~{expected_rate}, got {rate}"
+        expected_rate = 1.0 / 2.0  # price = 2.0 (QUOTE/BASE), so rate is 0.5 BASE per QUOTE
+        assert abs(rate - expected_rate) < 0.2, f"Expected rate ~{expected_rate}, got {rate}"
 
 
 def test_dca_order_count_matches_config():
@@ -224,8 +224,9 @@ def test_dca_uniform_distribution_equal_amounts():
     
     # Should spend approximately total_amount QUOTE
     assert abs(quote_spent - total_amount) < 0.01, f"Expected to spend ~{total_amount} QUOTE, spent {quote_spent}"
-    # Should receive approximately total_amount * price BASE
-    expected_base = total_amount * 2.0  # price = 2.0
+    # Should receive approximately total_amount / price BASE
+    # price = 2.0 means 1 BASE = 2 QUOTE, so 50 QUOTE = 25 BASE
+    expected_base = total_amount / 2.0  # 50 QUOTE / 2.0 = 25 BASE
     assert abs(base_received - expected_base) < 0.1, f"Expected ~{expected_base} BASE, got {base_received}"
     
     # Verify final balances
