@@ -17,12 +17,24 @@ class FakeConnector:
 
     def get_price(self, base_symbol, quote_symbol):
         return 1.0
+    
+    def get_price_fast(self, base_symbol, quote_symbol):
+        return 1.0
+    
+    def get_price_side(self, base_symbol, quote_symbol, side='buy', fast=True):
+        return 1.0
 
     def get_balance(self, symbol):
         return self._balances.get(symbol, 0.0)
 
     def approve(self, symbol, amount):
         return "0xapprove"
+    
+    def check_approval(self, symbol, amount):
+        return False  # Already approved
+    
+    def get_allowance(self, symbol):
+        return 10**36  # Unlimited
 
     def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50, side=None):
         tx = f"0xswap{len(self._txs)}"
@@ -34,9 +46,25 @@ class FakeConnector:
             self._balances["QUOTE"] -= amount
             self._balances["BASE"] += amount
         return tx
+    
+    def swap_exact_out(self, token_in_symbol, token_out_symbol, target_out_amount, slippage_bps=50):
+        tx = f"0xswap_exact_out{len(self._txs)}"
+        self._txs.append(tx)
+        # Simplified: just swap the amounts
+        if token_out_symbol == "BASE":
+            self._balances["BASE"] += target_out_amount
+            self._balances["QUOTE"] -= target_out_amount
+        else:
+            self._balances["QUOTE"] += target_out_amount
+            self._balances["BASE"] -= target_out_amount
+        return tx
+    
+    def quantize_amount(self, symbol, amount):
+        return round(amount, 6)
 
-    def tx_explorer_url(self, tx_hash):
-        return f"https://bscscan.com/tx/{tx_hash}"
+    @property
+    def tx_explorer_url(self):
+        return "https://bscscan.com/tx/"
 
 
 def run_simple_swap(fake: FakeConnector):
@@ -68,7 +96,6 @@ def run_batch_swap(fake: FakeConnector):
         distribution="uniform",
         interval_seconds=0.01,
     )
-    from strategies.dex_batch_swap import DexBatchSwap
     s = DexBatchSwap(cfg, connectors=[fake])  # type: ignore[arg-type]
     s.start()
     time.sleep(0.05)
