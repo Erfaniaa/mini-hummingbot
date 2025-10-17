@@ -173,7 +173,6 @@ class DexDCA:
             
             success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
             # Wait briefly after each submit to allow nonce to update (even if failed)
-            import time
             time.sleep(3)
             if success:
                 order_mgr.mark_filled(order)
@@ -303,7 +302,6 @@ class DexDCA:
         print("\n[dex_dca] Stopping strategy...")
         
         # Wait briefly for any pending transactions to be confirmed
-        import time
         time.sleep(1)
         
         # Print final snapshots and P&L reports

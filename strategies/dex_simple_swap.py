@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Optional
 from decimal import Decimal
@@ -74,7 +75,6 @@ class DexSimpleSwap:
     def _finalize(self, tx_hash: str) -> str:
         """Finalize swap: take final snapshot and print reports."""
         # Wait briefly for transaction to be mined and balance to update
-        import time
         time.sleep(3)
         
         # Take final snapshot

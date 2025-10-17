@@ -213,7 +213,6 @@ class DexPureMarketMaking:
             
             success = order_mgr.submit_order_with_retry(order, submit_swap, conn.tx_explorer_url)
             # Wait briefly after each submit to allow nonce to update (even if failed)
-            import time
             time.sleep(3)
             if success:
                 order_mgr.mark_filled(order)
@@ -226,8 +225,6 @@ class DexPureMarketMaking:
         """Tick handler with resilience and periodic reporting."""
         if self._stopped:
             return
-        
-        import time
         
         # Periodic balance reporting
         for i, reporter in enumerate(self.reporters):
@@ -367,7 +364,6 @@ class DexPureMarketMaking:
         print("\n[dex_pmm] Stopping strategy...")
         
         # Wait briefly for any pending transactions to be confirmed
-        import time
         time.sleep(1)
         
         # Print final snapshots and P&L reports
