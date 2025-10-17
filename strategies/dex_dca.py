@@ -62,7 +62,8 @@ class DexDCA:
         ]
         self.remaining = float(cfg.total_amount)
         self.orders_left = int(cfg.num_orders)
-        self.completed_orders = 0  # Track how many DCA cycles completed
+        self.completed_orders = 0  # Track how many DCA cycles completed successfully
+        self.attempted_orders = 0  # Track total attempts (including failures)
         self._stopped: bool = False
         self._start_time: Optional[float] = None  # Set when strategy starts
         
@@ -223,7 +224,15 @@ class DexDCA:
         if self._connection_monitor.should_warn():
             print(f"[dex_dca] ⚠ Warning: {self._connection_monitor.consecutive_failures} consecutive connection failures")
         
-        if self.orders_left <= 0 or self.remaining <= 0.0:
+        # Stop if:
+        # 1. All orders successfully completed, OR
+        # 2. No remaining amount, OR
+        # 3. Too many attempts (prevent infinite loop on persistent failures)
+        max_attempts = self.cfg.num_orders * 10  # Allow retries but prevent infinite loop
+        if self.orders_left <= 0 or self.remaining <= 0.0 or self.attempted_orders >= max_attempts:
+            if self.attempted_orders >= max_attempts and self.orders_left > 0:
+                print(f"[dex_dca] ⚠ Stopping after {max_attempts} attempts to prevent infinite loop")
+                print(f"[dex_dca]   Completed: {self.completed_orders}/{self.cfg.num_orders} orders")
             self.stop()
             return
         
@@ -268,14 +277,17 @@ class DexDCA:
             return
         
         # Execute DCA order
-        # Use the actual attempt number for logging (successful orders + 1)
-        current_order_num = self.completed_orders + 1
+        # Increment attempt counter before execution
+        self.attempted_orders += 1
+        current_order_num = self.attempted_orders
         ok = self._execute_order(amount, px, current_order_num)
         
         if ok:
             self.completed_orders += 1
             self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
+        # On failure, don't decrement orders_left to allow retries
+        # But attempted_orders still increments to prevent infinite loops
         
         # Log status with total balances across all wallets
         timestamp = format_timestamp(self._start_time)
@@ -283,9 +295,9 @@ class DexDCA:
             total_base = sum(conn.get_balance(self.cfg.base_symbol) for conn in self.connectors)
             total_quote = sum(conn.get_balance(self.cfg.quote_symbol) for conn in self.connectors)
             portfolio_value = total_quote + (total_base * px)
-            print(f"{timestamp} [dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
+            print(f"{timestamp} [dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Attempt {current_order_num}/{self.cfg.num_orders} executed={ok} | Completed: {self.completed_orders} | Remaining: {self.remaining:.6f} | Total balance (all wallets): {self.cfg.base_symbol}={total_base:.6f}, {self.cfg.quote_symbol}={total_quote:.2f} | Portfolio value: {portfolio_value:.2f} USDT")
         except Exception:
-            print(f"{timestamp} [dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Order {current_order_num}/{self.cfg.num_orders} executed={ok} | Remaining: {self.remaining:.6f} | Orders left: {self.orders_left}")
+            print(f"{timestamp} [dex_dca] Price: {px:.8f} {self.cfg.base_symbol}/{self.cfg.quote_symbol} | Attempt {current_order_num}/{self.cfg.num_orders} executed={ok} | Completed: {self.completed_orders} | Remaining: {self.remaining:.6f}")
 
     def _on_error(self, e: Exception) -> None:
         """Error handler - logs error but allows strategy to continue."""
