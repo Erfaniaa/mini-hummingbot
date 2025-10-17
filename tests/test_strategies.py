@@ -1,3 +1,15 @@
+"""
+Comprehensive strategy tests for all trading strategies.
+
+This file contains integration tests for:
+- DexSimpleSwap: Single market swap execution
+- DexBatchSwap: Ladder of price-triggered orders
+- DexPureMarketMaking: Symmetric market making around mid-price  
+- DexDCA: Dollar-cost averaging with periodic execution
+
+Note: This file is large (798 lines). Consider splitting into separate
+files per strategy if it grows significantly larger or becomes hard to maintain.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
