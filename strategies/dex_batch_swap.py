@@ -12,6 +12,13 @@ from strategies.order_manager import OrderManager, format_timestamp
 from strategies.periodic_reporter import PeriodicReporter, AggregateReporter
 from strategies.resilience import ConnectionMonitor, resilient_call, RetryConfig
 
+# Telegram notifier (optional)
+try:
+    from core.telegram_notifier import TelegramNotifier, get_notifier
+except ImportError:
+    TelegramNotifier = None
+    get_notifier = None
+
 
 @dataclass
 class DexBatchSwapConfig:
@@ -97,6 +104,10 @@ class DexBatchSwap:
         self._stopped: bool = False
         self._start_time: Optional[float] = None  # Set when strategy starts
         
+        # Get Telegram notifier if available
+        telegram_notifier = get_notifier() if get_notifier else None
+        self.telegram_notifier = telegram_notifier
+        
         # Initialize order managers and reporters per wallet
         self.order_managers: List[OrderManager] = []
         self.reporters: List[PeriodicReporter] = []
@@ -105,7 +116,11 @@ class DexBatchSwap:
             # Use provided wallet name if available, otherwise fallback to wallet_N
             wallet_name = (cfg.wallet_names[i] if cfg.wallet_names and i < len(cfg.wallet_names) 
                           else f"wallet_{i+1}")
-            self.order_managers.append(OrderManager(wallet_name=wallet_name, strategy_name="dex_batch_swap"))
+            self.order_managers.append(OrderManager(
+                wallet_name=wallet_name, 
+                strategy_name="dex_batch_swap",
+                telegram_notifier=telegram_notifier
+            ))
             self.reporters.append(PeriodicReporter(
                 wallet_name=wallet_name,
                 strategy_name="dex_batch_swap",
@@ -378,6 +393,11 @@ class DexBatchSwap:
         self._start_time = time.time()
         print("[dex_batch_swap] Starting strategy...")
         
+        # Send Telegram notification for strategy start
+        if self.telegram_notifier:
+            msg = f"Strategy STARTED: dex_batch_swap\nWallets: {len(self.connectors)}\nPair: {self.cfg.base_symbol.upper()}/{self.cfg.quote_symbol.upper()}\nTotal Amount: {self.cfg.total_amount}\nOrders: {self.cfg.num_orders}\nPrice Range: {self.cfg.min_price:.8f} - {self.cfg.max_price:.8f}"
+            self.telegram_notifier.notify_info(msg)
+        
         # Update order managers with start time
         for order_mgr in self.order_managers:
             order_mgr.strategy_start_time = self._start_time
@@ -446,5 +466,16 @@ class DexBatchSwap:
         print(f"[dex_batch_swap] Successful: {stats['successful']}")
         print(f"[dex_batch_swap] Failed: {stats['failed']}")
         print(f"[dex_batch_swap] Success Rate: {stats['success_rate']:.1f}%\n")
+        
+        # Send Telegram notification for strategy stop
+        if self.telegram_notifier:
+            # Get aggregate summary
+            total_orders = sum(order_mgr.get_summary()['total'] for order_mgr in self.order_managers)
+            total_filled = sum(order_mgr.get_summary()['filled'] for order_mgr in self.order_managers)
+            total_failed = sum(order_mgr.get_summary()['failed'] for order_mgr in self.order_managers)
+            msg = f"Strategy STOPPED: dex_batch_swap\nTotal Orders: {total_orders}\nFilled: {total_filled}\nFailed: {total_failed}\nConnection Success Rate: {stats['success_rate']:.1f}%"
+            self.telegram_notifier.notify_info(msg)
+            # Flush to ensure message is sent before strategy ends
+            self.telegram_notifier.flush()
 
 

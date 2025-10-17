@@ -8,8 +8,11 @@ from __future__ import annotations
 import time
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, TYPE_CHECKING
 from decimal import Decimal
+
+if TYPE_CHECKING:
+    from core.telegram_notifier import TelegramNotifier
 
 
 def format_timestamp(strategy_start_time: Optional[float] = None) -> str:
@@ -69,11 +72,19 @@ class OrderManager:
     Manages order lifecycle with validation, retries, and logging.
     """
     
-    def __init__(self, wallet_name: str, strategy_name: str, max_retries: int = 3, strategy_start_time: Optional[float] = None):
+    def __init__(
+        self, 
+        wallet_name: str, 
+        strategy_name: str, 
+        max_retries: int = 3, 
+        strategy_start_time: Optional[float] = None,
+        telegram_notifier: Optional['TelegramNotifier'] = None
+    ):
         self.wallet_name = wallet_name
         self.strategy_name = strategy_name
         self.max_retries = max_retries
         self.strategy_start_time = strategy_start_time
+        self.telegram_notifier = telegram_notifier
         self._order_counter = 0
         self.orders: Dict[int, OrderInfo] = {}
     
@@ -240,6 +251,11 @@ class OrderManager:
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         timestamp = format_timestamp(self.strategy_start_time)
         print(f"{timestamp} {prefix} ✗ Order #{order.internal_id} FAILED: {reason}")
+        
+        # Send Telegram notification for validation failures
+        if self.telegram_notifier and reason:
+            msg = f"Order validation FAILED\nWallet: {order.wallet_name}\nStrategy: {order.strategy_name}\nSide: {order.side.upper()} {order.base_symbol}/{order.quote_symbol}\nReason: {reason}"
+            self.telegram_notifier.notify_warning(msg)
     
     def _log_submission(self, order: OrderInfo, attempt: int):
         """Log order submission."""
@@ -261,6 +277,11 @@ class OrderManager:
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         print(f"{prefix} ✓ Order #{order.internal_id} submitted successfully")
         print(f"{prefix}   Transaction: {order.bscscan_url}")
+        
+        # Send Telegram notification
+        if self.telegram_notifier:
+            msg = f"Order submitted successfully\nWallet: {order.wallet_name}\nStrategy: {order.strategy_name}\nSide: {order.side.upper()} {order.base_symbol}/{order.quote_symbol}\nTransaction: {order.bscscan_url}"
+            self.telegram_notifier.notify_success(msg)
     
     def _log_retry(self, order: OrderInfo, attempt: int, error: Exception):
         """Log retry attempt."""
@@ -273,6 +294,11 @@ class OrderManager:
         prefix = f"[{order.wallet_name}] [{order.strategy_name}]"
         print(f"{prefix} ✗ Order #{order.internal_id} FAILED after {self.max_retries} attempts")
         print(f"{prefix}   Error: {error}")
+        
+        # Send Telegram notification
+        if self.telegram_notifier:
+            msg = f"Order FAILED after {self.max_retries} attempts\nWallet: {order.wallet_name}\nStrategy: {order.strategy_name}\nSide: {order.side.upper()} {order.base_symbol}/{order.quote_symbol}\nError: {error}"
+            self.telegram_notifier.notify_critical(msg)
     
     def _log_filled(self, order: OrderInfo):
         """Log order fill."""
@@ -284,6 +310,16 @@ class OrderManager:
         if order.actual_output:
             print(f"{prefix}   Received: {order.actual_output}")
         print(f"{prefix}   Execution time: {duration:.1f}s")
+        
+        # Send Telegram notification
+        if self.telegram_notifier:
+            msg = f"Order FILLED\nWallet: {order.wallet_name}\nStrategy: {order.strategy_name}\nSide: {order.side.upper()} {order.base_symbol}/{order.quote_symbol}"
+            if order.actual_output:
+                msg += f"\nReceived: {order.actual_output}"
+            msg += f"\nExecution time: {duration:.1f}s"
+            if order.bscscan_url:
+                msg += f"\nTransaction: {order.bscscan_url}"
+            self.telegram_notifier.notify_success(msg)
     
     def get_summary(self) -> Dict[str, Any]:
         """Get order summary statistics."""

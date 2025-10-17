@@ -11,6 +11,13 @@ from strategies.order_manager import OrderManager, PreOrderCheck
 from strategies.periodic_reporter import PeriodicReporter
 from strategies.resilience import ConnectionMonitor
 
+# Telegram notifier (optional)
+try:
+    from core.telegram_notifier import TelegramNotifier, get_notifier
+except ImportError:
+    TelegramNotifier = None
+    get_notifier = None
+
 
 @dataclass
 class DexSimpleSwapConfig:
@@ -54,7 +61,15 @@ class DexSimpleSwap:
         
         # Initialize order manager and reporter
         wallet_name = cfg.label or "default"
-        self.order_manager = OrderManager(wallet_name=wallet_name, strategy_name="dex_simple_swap")
+        
+        # Get Telegram notifier if available
+        telegram_notifier = get_notifier() if get_notifier else None
+        
+        self.order_manager = OrderManager(
+            wallet_name=wallet_name, 
+            strategy_name="dex_simple_swap",
+            telegram_notifier=telegram_notifier
+        )
         self.reporter = PeriodicReporter(
             wallet_name=wallet_name,
             strategy_name="dex_simple_swap",
@@ -64,6 +79,9 @@ class DexSimpleSwap:
         
         # Connection monitoring
         self._connection_monitor = ConnectionMonitor(f"dex_simple_swap-{wallet_name}")
+        
+        # Store telegram notifier for strategy-level notifications
+        self.telegram_notifier = telegram_notifier
 
     def _prefix(self) -> str:
         return f"[{self.cfg.label}] " if self.cfg.label else ""
@@ -97,9 +115,21 @@ class DexSimpleSwap:
         print(f"{prefix} Failed: {summary['failed']}")
         print(f"{prefix} Success Rate: {summary['success_rate']:.1f}%\n")
         
+        # Send Telegram notification for strategy completion
+        if self.telegram_notifier:
+            msg = f"Strategy COMPLETED: dex_simple_swap\nWallet: {self.cfg.label or 'default'}\nPair: {self.cfg.base_symbol.upper()}/{self.cfg.quote_symbol.upper()}\nTotal Orders: {summary['total']}\nFilled: {summary['filled']}\nFailed: {summary['failed']}\nSuccess Rate: {summary['success_rate']:.1f}%"
+            self.telegram_notifier.notify_info(msg)
+            # Flush to ensure message is sent before strategy ends
+            self.telegram_notifier.flush()
+        
         return tx_hash
 
     def run(self) -> str:
+        # Send Telegram notification for strategy start
+        if self.telegram_notifier:
+            msg = f"Strategy STARTED: dex_simple_swap\nWallet: {self.cfg.label or 'default'}\nPair: {self.cfg.base_symbol.upper()}/{self.cfg.quote_symbol.upper()}\nAmount: {self.cfg.amount}"
+            self.telegram_notifier.notify_info(msg)
+        
         # Take initial snapshot
         self.reporter.take_snapshot(self.connector, force=True)
         
