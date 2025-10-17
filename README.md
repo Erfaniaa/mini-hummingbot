@@ -16,6 +16,7 @@ Features
 - CLI (wallet add/list/remove + strategies menu)
 - PancakeSwap v2 and v3 support with automatic best-route selection
 - Exact-output swaps for precise target amounts
+- **MEV Protection** to prevent frontrunning and sandwich attacks
 
 Strategies
 - dex_simple_swap: one-time market swap
@@ -38,6 +39,15 @@ Reporting & Monitoring
 - Final comprehensive reports per wallet and aggregate
 - Success/failure statistics for all orders
 - Connection health monitoring
+
+MEV Protection
+- **What is MEV?** MEV (Maximal Extractable Value) attacks include frontrunning and sandwich attacks where bots exploit transaction ordering to profit at your expense
+- **How it works:** Routes all transactions through PancakeSwap's private RPC endpoint (`bscrpc.pancakeswap.finance`) which prevents bots from seeing your transactions before they're confirmed
+- **Enable MEV Protection:** Set `use_mev_protection: true` in your strategy config
+- **Supported Networks:** BSC Mainnet (56) and BSC Testnet (97)
+- **Zero Configuration:** MEV protection automatically uses the correct private RPC endpoint when enabled
+- **Performance:** No additional latency - private RPC is optimized for fast execution
+- **When to use:** Always recommended for large trades or market-making strategies on mainnet
 
 Network Resilience
 - Automatic retry on network failures
@@ -78,6 +88,20 @@ Technical Notes
 - Supports both exact-input and exact-output swaps
 - Automatic path finding between v2 and v3 routes
 - Multi-hop routing via WBNB/USDC for optimal prices
+- MEV protection available for all strategies with single config flag
 - Atomic commits and clean git history
-- Comprehensive test coverage for critical paths
+- Comprehensive test coverage for critical paths including MEV protection
 - All reports include P&L in both absolute and percentage terms
+
+Configuration Example (with MEV Protection)
+```json
+{
+  "base": "LINK",
+  "quote": "USDT",
+  "amount": 100.0,
+  "amount_is_base": false,
+  "slippage_bps": 50,
+  "chain_id": 56,
+  "use_mev_protection": true
+}
+```
