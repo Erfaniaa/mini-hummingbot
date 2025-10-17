@@ -148,7 +148,9 @@ class DexSimpleSwap:
                 est_in = 0.0
             
             if est_in > 0:
-                pad = (10_000 + int(self.cfg.slippage_bps) + 50) / 10_000.0
+                # Use 2x slippage as buffer for volatile markets
+                # This provides more safety margin for exact-output swaps
+                pad = (10_000 + int(self.cfg.slippage_bps) * 2) / 10_000.0
                 est_in_padded = est_in * pad
                 bal_check_amt = self._quantize(spend_symbol, est_in_padded)
                 
