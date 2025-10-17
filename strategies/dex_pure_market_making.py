@@ -46,6 +46,14 @@ class DexPureMarketMaking:
 
     def __init__(self, cfg: DexPureMMConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
+        
+        # Validate configuration to prevent negative price levels
+        max_safe_lower_percent = 100.0 / float(cfg.levels_each_side) if cfg.levels_each_side > 0 else 0
+        if cfg.lower_percent * cfg.levels_each_side >= 100.0:
+            print(f"[dex_pmm] Warning: lower_percent ({cfg.lower_percent}%) × levels ({cfg.levels_each_side}) >= 100%")
+            print(f"[dex_pmm] This would create negative price levels. Consider lower_percent < {max_safe_lower_percent:.2f}%")
+            print(f"[dex_pmm] Levels will be clamped to minimum 1% of mid price")
+        
         self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id, use_mev_protection=cfg.use_mev_protection)
             for pk in cfg.private_keys
@@ -132,8 +140,17 @@ class DexPureMarketMaking:
         up = []
         dn = []
         for i in range(1, self.cfg.levels_each_side + 1):
-            up.append(mid * (1.0 + self.cfg.upper_percent / 100.0 * i))
-            dn.append(mid * (1.0 - self.cfg.lower_percent / 100.0 * i))
+            upper_level = mid * (1.0 + self.cfg.upper_percent / 100.0 * i)
+            up.append(upper_level)
+            
+            # Ensure lower level doesn't go negative or zero
+            lower_multiplier = 1.0 - self.cfg.lower_percent / 100.0 * i
+            if lower_multiplier <= 0:
+                # If percent is too large, use a minimum threshold
+                lower_level = mid * 0.01  # 1% of mid price as floor
+            else:
+                lower_level = mid * lower_multiplier
+            dn.append(lower_level)
         self.upper_levels = up
         self.lower_levels = dn
 

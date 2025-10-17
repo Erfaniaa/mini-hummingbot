@@ -74,6 +74,17 @@ class DexBatchSwap:
 
     def __init__(self, cfg: DexBatchSwapConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
+        
+        # Validate configuration
+        if cfg.min_price <= 0 or cfg.max_price <= 0:
+            raise ValueError(f"Prices must be positive: min={cfg.min_price}, max={cfg.max_price}")
+        if cfg.min_price >= cfg.max_price:
+            raise ValueError(f"min_price ({cfg.min_price}) must be < max_price ({cfg.max_price})")
+        if cfg.num_orders <= 0:
+            raise ValueError(f"num_orders must be positive: {cfg.num_orders}")
+        if cfg.total_amount <= 0:
+            raise ValueError(f"total_amount must be positive: {cfg.total_amount}")
+        
         self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id, use_mev_protection=cfg.use_mev_protection)
             for pk in cfg.private_keys

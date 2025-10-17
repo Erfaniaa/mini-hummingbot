@@ -40,6 +40,15 @@ class DexDCA:
 
     def __init__(self, cfg: DexDCAConfig, connectors: Optional[List[PancakeSwapConnector]] = None) -> None:
         self.cfg = cfg
+        
+        # Validate configuration
+        if cfg.num_orders <= 0:
+            raise ValueError(f"num_orders must be positive: {cfg.num_orders}")
+        if cfg.total_amount <= 0:
+            raise ValueError(f"total_amount must be positive: {cfg.total_amount}")
+        if cfg.interval_seconds <= 0:
+            raise ValueError(f"interval_seconds must be positive: {cfg.interval_seconds}")
+        
         self.connectors: List[PancakeSwapConnector] = connectors or [
             PancakeSwapConnector(rpc_url=cfg.rpc_url, private_key=pk, chain_id=cfg.chain_id, use_mev_protection=cfg.use_mev_protection)
             for pk in cfg.private_keys

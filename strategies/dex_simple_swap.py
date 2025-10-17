@@ -40,6 +40,11 @@ class DexSimpleSwap:
 
     def __init__(self, cfg: DexSimpleSwapConfig, connector: Optional[PancakeSwapConnector] = None) -> None:
         self.cfg = cfg
+        
+        # Validate configuration
+        if cfg.amount <= 0:
+            raise ValueError(f"amount must be positive: {cfg.amount}")
+        
         self.connector = connector or PancakeSwapConnector(
             rpc_url=cfg.rpc_url,
             private_key=cfg.private_key,
