@@ -243,11 +243,12 @@ class DexDCA:
             return
         
         # Execute DCA order
-        self.completed_orders += 1
-        current_order_num = self.completed_orders
+        # Use the actual attempt number for logging (successful orders + 1)
+        current_order_num = self.completed_orders + 1
         ok = self._execute_order(amount, px, current_order_num)
         
         if ok:
+            self.completed_orders += 1
             self.remaining = max(0.0, self.remaining - amount)
             self.orders_left -= 1
         
