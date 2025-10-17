@@ -337,7 +337,13 @@ class DexBatchSwap:
             
             timestamp = format_timestamp(self._start_time)
             if next_level:
-                distance = ((price - next_level) / next_level * 100) if spend_is_base else ((next_level - price) / price * 100)
+                # Calculate distance with zero-division protection
+                if spend_is_base and next_level > 0:
+                    distance = ((price - next_level) / next_level * 100)
+                elif not spend_is_base and price > 0:
+                    distance = ((next_level - price) / price * 100)
+                else:
+                    distance = 0.0  # Avoid division by zero
                 direction = "up" if spend_is_base else "down"
                 print(f"{timestamp} [dex_batch_swap] Current price: {price:.8f} | Next level #{next_level_num}: {next_level:.8f} ({abs(distance):.2f}% {direction}) | Remaining: {remaining_levels}/{len(self.levels)} | {self._balances_summary()}")
             else:
