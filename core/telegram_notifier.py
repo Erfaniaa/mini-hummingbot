@@ -151,6 +151,10 @@ class TelegramNotifier:
         if not self.config.enabled:
             return
         
+        # Skip empty messages
+        if not message or not message.strip():
+            return
+        
         # Format message with timestamp and level
         timestamp = datetime.now().strftime("%H:%M:%S")
         
@@ -183,6 +187,10 @@ class TelegramNotifier:
     def notify_warning(self, message: str):
         """Send warning notification."""
         self.notify(message, level="warning")
+    
+    def notify_info(self, message: str):
+        """Send info notification."""
+        self.notify(message, level="info")
     
     def flush(self):
         """Force send any pending messages immediately."""

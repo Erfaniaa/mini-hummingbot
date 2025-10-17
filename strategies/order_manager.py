@@ -175,10 +175,15 @@ class OrderManager:
         self,
         order: OrderInfo,
         submit_fn: Callable[[], str],
-        get_explorer_url: Callable[[str], str]
+        explorer_url_or_fn
     ) -> bool:
         """
         Submit order with retry logic.
+        
+        Args:
+            order: The order to submit
+            submit_fn: Function that executes the swap
+            explorer_url_or_fn: Either a base URL string or a callable that takes tx_hash
         
         Returns True if successful, False otherwise.
         """
@@ -196,7 +201,11 @@ class OrderManager:
                 
                 # Success
                 order.tx_hash = tx_hash
-                order.bscscan_url = get_explorer_url(tx_hash)
+                # Handle both string URL and callable
+                if callable(explorer_url_or_fn):
+                    order.bscscan_url = explorer_url_or_fn(tx_hash)
+                else:
+                    order.bscscan_url = f"{explorer_url_or_fn}{tx_hash}"
                 order.status = "submitted"
                 
                 self._log_success(order)

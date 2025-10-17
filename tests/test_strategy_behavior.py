@@ -224,12 +224,15 @@ def test_pure_mm_creates_symmetric_levels():
         upper_percent=5.0,
         lower_percent=5.0,
         levels_each_side=3,
-        order_lifetime_sec=60,
+        refresh_seconds=60,
         slippage_bps=50,
         use_mev_protection=False
     )
     
     strat = DexPureMarketMaking(cfg, [conn])
+    
+    # Manually build levels to test them
+    strat._rebuild_levels(100.0)
     
     # Check levels are created
     assert len(strat.upper_levels) == 3
@@ -262,13 +265,16 @@ def test_pure_mm_negative_level_prevention():
         upper_percent=5.0,
         lower_percent=50.0,  # 50% × 10 levels = 500% > 100%
         levels_each_side=10,
-        order_lifetime_sec=60,
+        refresh_seconds=60,
         slippage_bps=50,
         use_mev_protection=False
     )
     
     # Should not crash, should clamp levels
     strat = DexPureMarketMaking(cfg, [conn])
+    
+    # Manually build levels to test clamping
+    strat._rebuild_levels(100.0)
     
     # All levels should be positive
     for lvl in strat.lower_levels:
@@ -301,7 +307,7 @@ def test_dca_executes_correct_number_of_orders():
     strat = DexDCA(cfg, [conn])
     
     # Should have 5 orders planned
-    assert strat.total_orders == 5
+    assert strat.cfg.num_orders == 5
     assert strat.orders_left == 5
     assert strat.completed_orders == 0
     
@@ -414,6 +420,9 @@ def test_mev_protection_flag_all_strategies():
     
     # SimpleSwap
     cfg1 = DexSimpleSwapConfig(
+        rpc_url="http://test",
+        private_key="0x1111111111111111111111111111111111111111111111111111111111111111",
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         amount=10.0,
@@ -426,6 +435,9 @@ def test_mev_protection_flag_all_strategies():
     
     # BatchSwap
     cfg2 = DexBatchSwapConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         min_price=5.0,
@@ -442,6 +454,9 @@ def test_mev_protection_flag_all_strategies():
     
     # PureMM
     cfg3 = DexPureMMConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         order_amount=10.0,
@@ -449,7 +464,7 @@ def test_mev_protection_flag_all_strategies():
         upper_percent=5.0,
         lower_percent=5.0,
         levels_each_side=3,
-        order_lifetime_sec=60,
+        refresh_seconds=60,
         slippage_bps=50,
         use_mev_protection=True
     )
@@ -457,6 +472,9 @@ def test_mev_protection_flag_all_strategies():
     
     # DCA
     cfg4 = DexDCAConfig(
+        rpc_url="http://test",
+        private_keys=["0x1111111111111111111111111111111111111111111111111111111111111111"],
+        chain_id=56,
         base_symbol="BASE",
         quote_symbol="QUOTE",
         total_amount=100.0,

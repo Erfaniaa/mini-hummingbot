@@ -306,6 +306,7 @@ def test_batch_swap_insufficient_balance_for_all_levels():
 
 def test_pure_mm_both_sides_triggered():
     """Test Pure MM when price is exactly at mid, allowing both sides to trigger."""
+    import time
     conn = FakeConnector(initial_base=100, initial_quote=1000, price=10.0)
     
     cfg = DexPureMMConfig(
@@ -325,6 +326,8 @@ def test_pure_mm_both_sides_triggered():
     
     strategy = DexPureMarketMaking(cfg, connectors=[conn])
     strategy._rebuild_levels(10.0)
+    # Prevent _on_tick from refreshing levels by setting last refresh time to now
+    strategy._last_refresh_ts = time.time()
     
     # Upper level should be 10.05, lower should be 9.95
     # Set price exactly at upper level boundary

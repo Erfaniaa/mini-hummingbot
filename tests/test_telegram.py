@@ -204,7 +204,7 @@ def test_telegram_notifier_empty_message():
     notifier.notify_info("")
     notifier.notify_success("")
     
-    assert len(notifier._message_queue) == 0
+    assert notifier._message_queue.qsize() == 0
     
     notifier.stop()
 
