@@ -49,15 +49,25 @@ class FakeConnector:
         def from_wei(token, amount):
             return float(amount) / 1e18
 
-    def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50, side=None):
+    def market_swap(self, base_symbol=None, quote_symbol=None, amount=None, amount_is_base=None, 
+                    slippage_bps=50, side=None, base=None, quote=None, amount_token=None):
+        """Support both old and new signature styles"""
+        # Handle new style args
+        base_symbol = base_symbol or base
+        quote_symbol = quote_symbol or quote
+        if amount is None:
+            amount = amount_token
+            
         tx = f"0xswap{len(self._txs)}"
         self._txs.append(tx)
+        
+        # Update balances
         if amount_is_base:
-            self._balances["BASE"] -= amount
-            self._balances["QUOTE"] += amount
+            self._balances[base_symbol] = self._balances.get(base_symbol, 0) - amount
+            self._balances[quote_symbol] = self._balances.get(quote_symbol, 0) + amount
         else:
-            self._balances["QUOTE"] -= amount
-            self._balances["BASE"] += amount
+            self._balances[quote_symbol] = self._balances.get(quote_symbol, 0) - amount
+            self._balances[base_symbol] = self._balances.get(base_symbol, 0) + amount
         return tx
     
     def swap_exact_out(self, token_in_symbol, token_out_symbol, target_out_amount, slippage_bps=50):
