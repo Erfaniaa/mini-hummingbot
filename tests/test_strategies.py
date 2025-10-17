@@ -142,7 +142,9 @@ class FakeConnector:
                       slippage_bps=50, **kwargs):
         """
         Execute exact-output swap (specify exact output, variable input).
-        Matches actual connector signature: no max_in_amount parameter.
+        
+        Convention: self._price is quote_per_base (e.g., USDT per BNB)
+        Example: price=2.0 means 1 BASE = 2 QUOTE
         """
         tx = f"0xswap_exact_out{len(self._txs)}"
         self._txs.append(tx)
@@ -151,13 +153,13 @@ class FakeConnector:
         if token_out_symbol == "BASE":
             # Buying BASE (output is BASE)
             base_received = target_out_amount
-            quote_spent = base_received / self._price
+            quote_spent = base_received * self._price  # Fixed: multiply, not divide
             self._balances["BASE"] += base_received
             self._balances["QUOTE"] -= quote_spent
         else:
             # Selling BASE for QUOTE (output is QUOTE)
             quote_received = target_out_amount
-            base_spent = quote_received * self._price
+            base_spent = quote_received / self._price  # Fixed: divide, not multiply
             self._balances["QUOTE"] += quote_received
             self._balances["BASE"] -= base_spent
         
@@ -166,6 +168,9 @@ class FakeConnector:
     def market_swap(self, base_symbol, quote_symbol, amount, amount_is_base, slippage_bps=50, side=None):
         """
         Execute swap and update balances.
+        
+        Convention: self._price is quote_per_base (e.g., USDT per BNB)
+        Example: price=2.0 means 1 BASE = 2 QUOTE
         
         Args:
             base_symbol: Base token symbol
@@ -187,11 +192,11 @@ class FakeConnector:
             if amount_is_base:
                 # Amount is target base to receive
                 base_received = amount
-                quote_spent = base_received / self._price
+                quote_spent = base_received * self._price  # Fixed: multiply, not divide
             else:
                 # Amount is quote to spend
                 quote_spent = amount
-                base_received = quote_spent * self._price
+                base_received = quote_spent / self._price  # Fixed: divide, not multiply
             
             self._balances["QUOTE"] -= quote_spent
             self._balances["BASE"] += base_received
@@ -201,11 +206,11 @@ class FakeConnector:
             if amount_is_base:
                 # Amount is base to sell
                 base_spent = amount
-                quote_received = base_spent / self._price
+                quote_received = base_spent * self._price  # Fixed: multiply, not divide
             else:
                 # Amount is target quote to receive
                 quote_received = amount
-                base_spent = quote_received * self._price
+                base_spent = quote_received / self._price  # Fixed: divide, not multiply
             
             self._balances["BASE"] -= base_spent
             self._balances["QUOTE"] += quote_received
@@ -213,10 +218,10 @@ class FakeConnector:
             # Legacy: no side specified, use amount_is_base
             if amount_is_base:
                 self._balances["BASE"] -= amount
-                self._balances["QUOTE"] += amount / self._price
+                self._balances["QUOTE"] += amount * self._price  # Fixed: multiply, not divide
             else:
                 self._balances["QUOTE"] -= amount
-                self._balances["BASE"] += amount * self._price
+                self._balances["BASE"] += amount / self._price  # Fixed: divide, not multiply
         
         return tx
 
