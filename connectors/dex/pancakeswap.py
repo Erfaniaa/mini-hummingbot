@@ -1,3 +1,8 @@
+# TODO: Consider refactoring this file (1116 lines) into separate modules:
+# - pancakeswap_client.py: Low-level PancakeSwapClient class
+# - pancakeswap_connector.py: High-level PancakeSwapConnector wrapper
+# This would improve maintainability without breaking existing functionality.
+
 from __future__ import annotations
 
 import time
