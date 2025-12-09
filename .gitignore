@@ -4,12 +4,25 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+*.egg-info/
+dist/
+build/
+.eggs/
 
 # Virtualenv
 .venv/
 venv/
+env/
+ENV/
 
-# Keystore contents (keep dir with .gitkeep)
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Keystore contents (keep dir with .gitkeep) - CONFIDENTIAL
 keystore/*
 !keystore/.gitkeep
 
@@ -17,5 +30,35 @@ keystore/*
 settings/*
 !settings/.gitkeep
 
-# Telegram configuration
+# Telegram configuration - CONFIDENTIAL
 telegram_config.json
+
+# Environment variables and secrets - CONFIDENTIAL
+.env
+.env.local
+.env.*.local
+*.env
+secrets.json
+config.json
+
+# API Keys and Private Keys - CONFIDENTIAL
+*_key.txt
+*_secret.txt
+private_key*
+api_key*
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.nox/

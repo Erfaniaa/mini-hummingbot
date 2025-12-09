@@ -26,5 +26,5 @@ def test_token_registry_merges_custom(tmp_path):
     tr.CUSTOM_MAINNET_FILE = custom_path
 
     reg = TokenRegistry("mainnet")
-    ovl = reg.get("ovl")
-    assert ovl.address == "0xCUSTOM"
+    btcb = reg.get("btcb")
+    assert btcb.address == "0xCUSTOM"

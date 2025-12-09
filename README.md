@@ -1,99 +1,153 @@
-Mini-Hummingbot (PancakeSwap CLI)
+# 🤖 Mini-Hummingbot
 
-Getting Started
-- Create a Python 3.10+ venv: `python3 -m venv venv && source venv/bin/activate`
-- Install deps: `pip install -r requirements.txt`
-- Run the CLI: `python -m cli.main`
-- Add wallets via encrypted keystore
-- Approve tokens for PancakeSwap (one-time setup)
-- Select and configure a strategy
-- Monitor live with detailed order tracking and P&L updates
+A lightweight, minimalist trading bot for PancakeSwap on BSC (Binance Smart Chain). Inspired by the popular [Hummingbot](https://hummingbot.org/) project, **mini-hummingbot** provides a simplified but powerful CLI for automated trading strategies.
 
-Running Tests
+---
+
+## 🐦 What is Hummingbot?
+
+[Hummingbot](https://github.com/hummingbot/hummingbot) is an open-source trading bot framework that allows users to run market-making and arbitrage strategies on centralized and decentralized exchanges. It's a comprehensive platform with support for 40+ exchanges, complex strategies, and enterprise-grade features.
+
+## 🔄 Mini-Hummingbot vs Hummingbot
+
+| Feature | Mini-Hummingbot | Hummingbot |
+|---------|----------------|------------|
+| **Focus** | PancakeSwap DEX on BSC | 40+ CEX/DEX exchanges |
+| **Setup** | Simple pip install + CLI | Docker/Source installation |
+| **Strategies** | 4 core strategies | 20+ strategy types |
+| **Complexity** | Minimal (~3K LOC) | Enterprise-grade (~200K+ LOC) |
+| **Learning Curve** | Minutes to get started | Hours to days |
+| **Config** | Interactive CLI prompts | YAML/JSON config files |
+| **Wallets** | Built-in encrypted keystore | External wallet connection |
+| **MEV Protection** | ✅ Built-in | Varies by connector |
+| **Best For** | Quick PancakeSwap trading | Professional trading operations |
+
+### When to use Mini-Hummingbot?
+- ✅ You want to trade on PancakeSwap quickly
+- ✅ You prefer a simple, no-frills CLI experience
+- ✅ You're learning about automated trading
+- ✅ You need a lightweight solution for BSC
+
+### When to use Hummingbot?
+- ✅ You need multi-exchange support
+- ✅ You want advanced strategies (arbitrage, cross-exchange MM)
+- ✅ You need extensive customization options
+- ✅ You're running production trading operations
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.10+
+- BSC wallet with BNB for gas fees
+
+### Installation
+
 ```bash
-# Quick test run
-./run_tests.sh
+# Clone the repository
+git clone https://github.com/yourusername/mini-hummingbot.git
+cd mini-hummingbot
 
-# All tests with details
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/ -v
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-# Specific test file
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/test_strategies.py -v
+# Install dependencies
+pip install -r requirements.txt
 
-# Specific test
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/test_strategies.py::test_dex_simple_swap_sell_base_exact_amount -v
+# Run the CLI
+python -m cli.main
 ```
 
-Test Coverage: strategy execution, resilience/network failures, MEV protection, corner cases, price calculations
+### First Steps
+1. **Add wallets** via encrypted keystore
+2. **Approve tokens** for PancakeSwap (one-time setup)
+3. **Select and configure** a strategy
+4. **Monitor** live with detailed order tracking and P&L updates
 
-Features
-- Encrypted keystore (multiple wallets)
-- Token registry (PancakeSwap lists; copy JSON files into `tokens/`)
-- Connector abstraction and PancakeSwap connector wrapper
-- CLI (wallet add/list/remove + strategies menu)
-- PancakeSwap v2 and v3 support with automatic best-route selection
-- Exact-output swaps for precise target amounts
-- **MEV Protection** to prevent frontrunning and sandwich attacks
+---
 
-Strategies
-- dex_simple_swap: one-time market swap
-- dex_pure_market_making: symmetric levels with periodic refresh
-- dex_batch_swap: one-sided ladder across price range
-- dex_dca: interval-based allocation (uniform/random)
+## 📊 Available Strategies
 
-Order Management
-- Pre-order validation (balance, gas, allowance checks) before submission
-- Automatic retry mechanism (3 attempts with exponential backoff)
-- Order tracking with internal IDs (e.g., `dex_batch_swap-wallet_1-1`)
-- Detailed order information: base/quote, side (buy/sell), price, reason
-- Per-order submission, fill, and failure notifications
-- Orders clearly show which price level or DCA interval triggered them
-- Comprehensive logging with wallet name, strategy, and timestamps
+### 1. DEX Simple Swap
+One-time market swap on PancakeSwap.
 
-Reporting & Monitoring
-- Initial balance snapshots
-- Periodic P&L reporting (every 1 minute)
-- Final comprehensive reports per wallet and aggregate
-- Success/failure statistics for all orders
-- Connection health monitoring
-- **Telegram notifications** for critical events (optional):
+```
+Use case: Quick token swaps with optimal routing
+```
+
+### 2. DEX Pure Market Making
+Symmetric limit orders around mid price with periodic refresh.
+
+```
+Use case: Provide liquidity and capture spread
+```
+
+### 3. DEX Batch Swap
+One-sided ladder of swaps across a price range.
+
+```
+Use case: Scale into/out of positions gradually
+```
+
+### 4. DEX DCA (Dollar-Cost Averaging)
+Interval-based allocation with uniform or random distribution.
+
+```
+Use case: Reduce timing risk with scheduled buys/sells
+```
+
+---
+
+## 🛡️ Features
+
+### Security
+- **Encrypted Keystore**: AES-256 encryption for private keys
+- **MEV Protection**: Built-in defenses against frontrunning and sandwich attacks
+- **No External Calls**: All transactions signed locally
+
+### Trading
+- **PancakeSwap v2 & v3**: Automatic best-route selection
+- **Multi-hop Routing**: WBNB/USDC intermediaries for optimal prices
+- **Exact-output Swaps**: Precise target amounts
+- **Slippage Control**: Configurable tolerance (default 0.5%)
+
+### Reliability
+- **Automatic Retries**: 3 attempts with exponential backoff
+- **Network Resilience**: Continues despite temporary RPC issues
+- **Connection Monitoring**: Health checks and status alerts
+
+### Notifications
+- **Telegram Integration**: Real-time alerts for:
   - Strategy start/stop
   - Order fills and failures
   - Balance updates
-  - Configure via CLI menu or `telegram_config.json`
 
-MEV Protection
-- **What is MEV?** MEV (Maximal Extractable Value) is the profit that can be extracted by manipulating transaction ordering in a block. Common MEV attacks include:
-  - **Frontrunning:** Placing transactions ahead of yours to profit from price changes
-  - **Sandwich attacks:** Placing transactions before and after yours to extract value
-  - **Back-running:** Placing transactions immediately after yours to exploit state changes
-- **How it works:** Uses multiple defensive strategies to reduce MEV attack surface:
-  - **Higher Gas Price:** 20% premium over market rate for faster inclusion and priority
-  - **Tight Slippage:** Combined with existing slippage controls to limit sandwich attack profitability
-  - **Smart Deadlines:** 90-second timeout (optimized for ~70s actual swap time from real testing)
-- **Enable MEV Protection:** Set `use_mev_protection: true` in your strategy config
-- **Supported Networks:** BSC Mainnet (56) and BSC Testnet (97)
-- **Trade-offs:** Slightly higher gas costs but significantly reduced MEV risk
-- **When to use:** Recommended for large trades or market-making strategies on mainnet
-- **Note:** BSC doesn't have true private mempool solutions like Ethereum (Flashbots). These defensive strategies significantly reduce but don't eliminate MEV risk.
+---
 
-Network Resilience
-- Automatic retry on network failures
-- Exponential backoff for RPC calls
-- Connection state monitoring
-- Strategies continue running despite temporary network issues
-- Individual order failures don't stop other orders
+## 🔒 MEV Protection
 
-User Experience
-- Consistent BASE/QUOTE price display (never inverted)
-- Clean transaction links (BSC explorer only, no raw hashes)
-- Strategy stops cleanly without orphan transactions
-- Clear validation messages if orders can't be placed
-- Reduced log spam with smart periodic updates
-- "Please wait" notifications after order submission
-- All monetary values clearly labeled with token symbol
+**MEV (Maximal Extractable Value)** attacks include:
+- **Frontrunning**: Transactions placed ahead of yours
+- **Sandwich attacks**: Transactions before AND after yours
+- **Back-running**: Exploiting state changes from your tx
 
-Example Output
+### Our Defense Strategy
+| Technique | Description |
+|-----------|-------------|
+| Higher Gas Price | 20% premium for faster inclusion |
+| Tight Slippage | Limits sandwich attack profitability |
+| Smart Deadlines | 90-second timeout (optimized for BSC) |
+
+Enable with: `use_mev_protection: true`
+
+> **Note:** BSC lacks true private mempools like Ethereum's Flashbots. These techniques significantly reduce but don't eliminate MEV risk.
+
+---
+
+## 📈 Example Output
+
 ```
 [wallet_1] [dex_batch_swap] Order dex_batch_swap-wallet_1-1 (SELL BTCB/USDT) created
 [wallet_1] [dex_batch_swap]   Reason: Price level 1/11: 0.20000000
@@ -112,24 +166,174 @@ Example Output
 [wallet_1] [dex_batch_swap] P&L: +0.35 USDT (+0.78%)
 ```
 
-Technical Notes
-- Supports both exact-input and exact-output swaps
-- Automatic path finding between v2 and v3 routes
-- Multi-hop routing via WBNB/USDC for optimal prices
-- MEV protection available for all strategies with single config flag
-- Atomic commits and clean git history
-- Comprehensive test coverage for critical paths including MEV protection
-- All reports include P&L in both absolute and percentage terms
+---
 
-Configuration Example (with MEV Protection)
-```json
-{
-  "base": "LINK",
-  "quote": "USDT",
-  "amount": 100.0,
-  "amount_is_base": false,
-  "slippage_bps": 50,
-  "chain_id": 56,
-  "use_mev_protection": true
-}
+## 🧪 Running Tests
+
+```bash
+# Quick test run
+./run_tests.sh
+
+# All tests with details
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/ -v
+
+# Specific test file
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/test_strategies.py -v
 ```
+
+**Test Coverage:**
+- Strategy execution
+- Network resilience/failures
+- MEV protection
+- Corner cases
+- Price calculations
+
+---
+
+## 📁 Project Structure
+
+```
+mini-hummingbot/
+├── cli/                    # Command-line interface
+│   ├── main.py            # Entry point
+│   ├── menus/             # Menu handlers
+│   └── utils.py           # CLI utilities
+├── connectors/            # Exchange connectors
+│   ├── base.py            # Abstract connector
+│   └── dex/
+│       └── pancakeswap.py # PancakeSwap connector
+├── core/                  # Core functionality
+│   ├── keystore.py        # Encrypted wallet storage
+│   ├── settings_store.py  # Settings persistence
+│   ├── telegram_notifier.py
+│   └── token_registry.py  # Token lookups
+├── strategies/            # Trading strategies
+│   ├── dex_simple_swap.py
+│   ├── dex_pure_market_making.py
+│   ├── dex_batch_swap.py
+│   ├── dex_dca.py
+│   ├── engine.py          # Strategy loop
+│   ├── order_manager.py   # Order handling
+│   └── resilience.py      # Network resilience
+├── tests/                 # Test suite
+├── tokens/                # Token lists
+├── keystore/              # Encrypted keys (gitignored)
+└── settings/              # User settings (gitignored)
+```
+
+---
+
+## 📋 Roadmap & TODO
+
+We welcome contributions! Here are areas where you can help:
+
+### 🔴 High Priority
+
+- [ ] **Add CEX Support**: Integrate centralized exchanges
+  - [ ] Binance connector
+  - [ ] KuCoin connector
+  - [ ] Bybit connector
+  - [ ] OKX connector
+  
+- [ ] **Additional DEX Support**
+  - [ ] Uniswap (Ethereum, Arbitrum, Polygon)
+  - [ ] SushiSwap (multi-chain)
+  - [ ] TraderJoe (Avalanche)
+  - [ ] SpookySwap (Fantom)
+  - [ ] QuickSwap (Polygon)
+  - [ ] GMX (Arbitrum)
+
+### 🟡 Medium Priority
+
+- [ ] **New Strategies**
+  - [ ] Arbitrage between DEXes
+  - [ ] Cross-exchange market making
+  - [ ] Grid trading
+  - [ ] TWAP (Time-Weighted Average Price)
+  - [ ] Liquidity provision (LP) management
+  
+- [ ] **Advanced Features**
+  - [ ] Web dashboard for monitoring
+  - [ ] Backtesting framework
+  - [ ] Paper trading mode
+  - [ ] Multi-wallet orchestration
+  - [ ] Risk management (stop-loss, take-profit)
+  - [ ] Position sizing algorithms
+
+### 🟢 Nice to Have
+
+- [ ] **Infrastructure**
+  - [ ] Docker support
+  - [ ] Kubernetes deployment configs
+  - [ ] Cloud-native logging (ELK, Datadog)
+  
+- [ ] **Analytics**
+  - [ ] Historical trade analysis
+  - [ ] Performance metrics dashboard
+  - [ ] PnL visualization
+  
+- [ ] **Integrations**
+  - [ ] Discord notifications
+  - [ ] Slack notifications
+  - [ ] Email alerts
+  - [ ] Webhook support
+
+### 🔵 Technical Debt
+
+- [ ] Refactor `pancakeswap.py` (currently 1100+ lines)
+- [ ] Add type hints throughout
+- [ ] Improve test coverage to 90%+
+- [ ] Add integration tests with testnet
+- [ ] CI/CD pipeline with GitHub Actions
+- [ ] Documentation site with Sphinx/MkDocs
+
+---
+
+## 🤝 Contributing
+
+We love contributions! Here's how to get started:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### Contribution Guidelines
+- Follow existing code style
+- Add tests for new features
+- Update documentation as needed
+- Keep PRs focused and atomic
+
+---
+
+## ⚠️ Disclaimer
+
+This software is for educational purposes only. Use at your own risk.
+
+- **Not financial advice**: Do your own research before trading
+- **No guarantees**: Past performance doesn't indicate future results
+- **Test first**: Always test with small amounts on testnet
+- **Secure your keys**: Never share private keys or commit them to git
+
+---
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+---
+
+## 🙏 Acknowledgments
+
+- [Hummingbot](https://hummingbot.org/) - The inspiration for this project
+- [PancakeSwap](https://pancakeswap.finance/) - The DEX we support
+- [Web3.py](https://web3py.readthedocs.io/) - Ethereum/BSC interaction
+
+---
+
+## 📬 Contact
+
+Have questions or suggestions? Open an issue or reach out!
+
+**Star ⭐ this repo if you find it useful!**
