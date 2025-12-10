@@ -19,11 +19,13 @@ A lightweight, minimalist trading bot for PancakeSwap on BSC (Binance Smart Chai
 | **Learning Curve** | Minutes to get started | Hours to days |
 | **Config** | Interactive CLI prompts | YAML/JSON config files |
 | **Wallets** | Built-in encrypted keystore | External wallet connection |
+| **Multi-Wallet** | ✅ Parallel trading on multiple wallets | Single wallet per instance |
 | **MEV Protection** | ✅ Built-in | Varies by connector |
 | **Best For** | Quick PancakeSwap trading | Professional trading operations |
 
 ### When to use Mini-Hummingbot?
 - ✅ You want to trade on PancakeSwap quickly
+- ✅ You need to run strategies on multiple wallets in parallel
 - ✅ You prefer a simple, no-frills CLI experience
 - ✅ You're learning about automated trading
 - ✅ You need a lightweight solution for BSC
@@ -109,6 +111,7 @@ Use case: Reduce timing risk with scheduled buys/sells
 
 ### Trading
 - **PancakeSwap v2 & v3**: Automatic best-route selection
+- **Multi-Wallet Parallel Trading**: Run strategies on multiple wallets simultaneously
 - **Multi-hop Routing**: WBNB/USDC intermediaries for optimal prices
 - **Exact-output Swaps**: Precise target amounts
 - **Slippage Control**: Configurable tolerance (default 0.5%)
