@@ -2,6 +2,8 @@
 
 A lightweight, minimalist trading bot for PancakeSwap on BSC (Binance Smart Chain). Inspired by the popular [Hummingbot](https://hummingbot.org/) project, **mini-hummingbot** provides a simplified but powerful CLI for automated trading strategies.
 
+**⚡ Zero hassle setup**: No Docker, no complex configurations. Just `pip install` and you're ready to trade in under 2 minutes.
+
 ---
 
 ## 🐦 What is Hummingbot?
@@ -13,7 +15,7 @@ A lightweight, minimalist trading bot for PancakeSwap on BSC (Binance Smart Chai
 | Feature | Mini-Hummingbot | Hummingbot |
 |---------|----------------|------------|
 | **Focus** | PancakeSwap DEX on BSC | 40+ CEX/DEX exchanges |
-| **Setup** | Simple pip install + CLI | Docker/Source installation |
+| **Setup** | `pip install` + run (no Docker!) | Docker/Source installation |
 | **Strategies** | 4 core strategies | 20+ strategy types |
 | **Complexity** | Minimal (~3K LOC) | Enterprise-grade (~200K+ LOC) |
 | **Learning Curve** | Minutes to get started | Hours to days |
@@ -26,6 +28,7 @@ A lightweight, minimalist trading bot for PancakeSwap on BSC (Binance Smart Chai
 ### When to use Mini-Hummingbot?
 - ✅ You want to trade on PancakeSwap quickly
 - ✅ You need to run strategies on multiple wallets in parallel
+- ✅ You don't want to deal with Docker or complex setups
 - ✅ You prefer a simple, no-frills CLI experience
 - ✅ You're learning about automated trading
 - ✅ You need a lightweight solution for BSC
